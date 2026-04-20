@@ -150,6 +150,7 @@ function defaultGrid() {
     tempo_bpm: 120.0,
     midi_port1_channel: 1,
     active_page: { bank: 0, page: 0 },
+    live_time_signature: { numerator: 4, denominator: 4 },
     page_sets: pageSets,
     global_scale: defaultGlobalScale(),
     banks: banks,
@@ -171,10 +172,49 @@ function reset_state() {
   outlet(0, "state_reset");
 }
 
+// ---------- Live time signature (mirrors Live transport meter) ----------
+function _bangMatrixRedraw() {
+  try {
+    if (typeof this !== "undefined" && this.patcher) {
+      var m = this.patcher.getnamed("jsui-matrix-1");
+      if (m) m.message("bang");
+    }
+  } catch (e) {}
+}
+
+function set_time_signature(num, den) {
+  num = clampInt(num, 1, 32);
+  den = clampInt(den, 1, 32);
+  var d = getStateDict();
+  var cur = d.get("live_time_signature");
+  var same =
+    cur &&
+    clampInt(cur.numerator, 1, 32) === num &&
+    clampInt(cur.denominator, 1, 32) === den;
+  d.set("live_time_signature", { numerator: num, denominator: den });
+  outlet(0, "time_signature", num, den);
+  if (!same) _bangMatrixRedraw();
+}
+
+function sync_time_signature_from_live() {
+  if (typeof LiveAPI === "undefined") return;
+  try {
+    var api = new LiveAPI("live_set");
+    var n = api.get("signature_numerator");
+    var de = api.get("signature_denominator");
+    var num = Array.isArray(n) ? n[0] : n;
+    var den = Array.isArray(de) ? de[0] : de;
+    num = clampInt(num, 1, 32);
+    den = clampInt(den, 1, 32);
+    set_time_signature(num, den);
+  } catch (e) {}
+}
+
 function ensure_state() {
   var d = getStateDict();
   if (!d.getkeys || d.getkeys() === null) {
     reset_state();
+    sync_time_signature_from_live();
     return;
   }
   var changed = 0;
@@ -192,6 +232,7 @@ function ensure_state() {
   ensureRoot("midi_routing_mode");
   ensureRoot("fixed_routing");
   ensureRoot("tempo_bpm");
+  ensureRoot("live_time_signature");
 
   // Repair active page shape/ranges without wiping other state.
   var ap = d.get("active_page") || {};
@@ -212,6 +253,7 @@ function ensure_state() {
 
   if (changed) outlet(0, "state_repaired");
   outlet(0, "state_ok");
+  sync_time_signature_from_live();
 }
 
 function get_active_page() {
@@ -357,6 +399,78 @@ function rec_toggle() {
   var armed = asBool(d.get("record_armed"));
   d.set("record_armed", !armed);
   outlet(0, "record_armed", !armed ? 1 : 0);
+}
+
+// ---------- Factory presets (indices 0..3) ----------
+function apply_preset(id) {
+  id = clampInt(id, 0, 3);
+  if (id === 0) {
+    reset_state();
+    _bangMatrixRedraw();
+    outlet(0, "preset_applied", 0);
+    return;
+  }
+  reset_state();
+  var d = getStateDict();
+  var b = 0;
+  var p = 0;
+
+  function stepPath(ti, si) {
+    return [
+      "banks", b, "pages", p, "tracks", ti, "steps", si,
+    ].join("::");
+  }
+
+  if (id === 1) {
+    for (var t = 0; t < 10; t++) {
+      for (var s = 0; s < 16; s++) d.set(stepPath(t, s) + "::active", 0);
+      d.set(stepPath(t, 0) + "::active", 1);
+      d.set(stepPath(t, 4) + "::active", 1);
+      d.set(stepPath(t, 8) + "::active", 1);
+      d.set(stepPath(t, 12) + "::active", 1);
+    }
+  } else if (id === 2) {
+    var pagePath = ["banks", b, "pages", p].join("::");
+    d.set(pagePath + "::len", 16);
+    var pats = [
+      [0, 4, 8, 12],
+      [0, 3, 6, 9],
+      [0, 2, 5, 7],
+      [0, 1, 2, 3],
+      [0, 8],
+      [0, 2, 4],
+      [0, 3, 7, 11],
+      [0, 4, 8],
+      [0, 6, 12],
+      [0, 2, 4, 6, 8],
+    ];
+    for (var ti = 0; ti < 10; ti++) {
+      for (var s = 0; s < 16; s++) d.set(stepPath(ti, s) + "::active", 0);
+      for (var j = 0; j < pats[ti].length; j++) {
+        var si = pats[ti][j];
+        d.set(stepPath(ti, si) + "::active", 1);
+      }
+    }
+  } else if (id === 3) {
+    var pageScalePath = ["banks", b, "pages", p, "scale"].join("::");
+    d.set(pageScalePath + "::enabled", 1);
+    d.set(pageScalePath + "::mode", "maj");
+    d.set(pageScalePath + "::intervals", [0, 2, 4, 5, 7, 9, 11]);
+    for (var t2 = 0; t2 < 10; t2++) {
+      for (var s2 = 0; s2 < 16; s2++) {
+        var on = s2 % 2 === 0 && (t2 + s2) % 3 === 0 ? 1 : 0;
+        d.set(stepPath(t2, s2) + "::active", on);
+      }
+    }
+  }
+
+  d.set("active_page", { bank: b, page: p });
+  _bangMatrixRedraw();
+  outlet(0, "preset_applied", id);
+}
+
+function preset(id) {
+  apply_preset(clampInt(id, 0, 3));
 }
 
 // ---------- Dump helpers ----------

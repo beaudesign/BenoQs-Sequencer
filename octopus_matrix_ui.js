@@ -78,6 +78,10 @@ function _paintStatusHeader(g, snapHdr) {
   var scaleEnabled = !!snapHdr.d.get(scalePath + "::enabled");
   var scaleMode = String(snapHdr.d.get(scalePath + "::mode") || "maj").toUpperCase();
 
+  var ts = snapHdr.d.get("live_time_signature") || {};
+  var tsn = _clampInt(ts.numerator != null ? ts.numerator : 4, 1, 32);
+  var tsd = _clampInt(ts.denominator != null ? ts.denominator : 4, 1, 32);
+
   var line1 =
     "B" +
     snapHdr.bank +
@@ -86,7 +90,11 @@ function _paintStatusHeader(g, snapHdr) {
     " · " +
     mode.toUpperCase() +
     " · " +
-    selectedAttr.toUpperCase();
+    selectedAttr.toUpperCase() +
+    " · " +
+    tsn +
+    "/" +
+    tsd;
   var line2 =
     "TRK " +
     selectedTrack +

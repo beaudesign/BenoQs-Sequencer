@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Build Octopus.amxd by replacing the embedded Max patch (ptch chunk) inside
+Build BenoQs.amxd by replacing the embedded Max patch (ptch chunk) inside
 Ableton's stock "Max MIDI Effect.amxd" container.
 
 Requires: Ableton Live installed at the default path (edit LIVE_APP if needed).
-Output: ../Octopus.amxd next to this repo's .js files (same folder as octopus_ui_main.maxpat).
+Output: ../BenoQs.amxd next to this repo's .js files (same folder as octopus_ui_main.maxpat).
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ LIVE_APP = Path(
     "/Applications/Ableton Live 12 Standard.app/Contents/App-Resources/Misc/Max Devices/Max MIDI Effect.amxd"
 )
 TEMPLATE_MAXPAT = REPO_ROOT / "octopus_ui_main.maxpat"
-OUT_AMXD = REPO_ROOT / "Octopus.amxd"
+OUT_AMXD = REPO_ROOT / "BenoQs.amxd"
 
 
 def read_amxd_chunks(path: Path) -> tuple[bytes, bytes]:
