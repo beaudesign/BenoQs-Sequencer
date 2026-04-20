@@ -22,7 +22,7 @@ var cols = 16;
 var cell = 14;
 var gap = 2;
 var padLeft = 40;
-var padTop = 42;
+var padTop = 46;
 
 var mode = "page"; // page|track|step|grid
 var selectedTrack = 0;
@@ -37,6 +37,7 @@ var colors = {
   skip: [0.87, 0.20, 0.20, 1.0], // #dd3333
   chord: [0.87, 0.53, 0.20, 1.0], // #dd8833
   label: [0.8, 0.8, 0.8, 1.0],
+  labelMuted: [0.52, 0.52, 0.52, 1.0],
   sel: [1.0, 0.53, 0.0, 1.0],
 };
 
@@ -71,14 +72,48 @@ function _getActivePageSnapshot() {
   return { d: d, bank: bank, page: page, pageObj: pageObj, tracks: tracks };
 }
 
+// Mirrors ui-mock status line: B0 P1 · PAGE · VEL
+function _paintStatusHeader(g, snapHdr) {
+  var scalePath = ["banks", snapHdr.bank, "pages", snapHdr.page, "scale"].join("::");
+  var scaleEnabled = !!snapHdr.d.get(scalePath + "::enabled");
+  var scaleMode = String(snapHdr.d.get(scalePath + "::mode") || "maj").toUpperCase();
+
+  var line1 =
+    "B" +
+    snapHdr.bank +
+    " P" +
+    (snapHdr.page + 1) +
+    " · " +
+    mode.toUpperCase() +
+    " · " +
+    selectedAttr.toUpperCase();
+  var line2 =
+    "TRK " +
+    selectedTrack +
+    " STP " +
+    selectedStep +
+    " · SCALE " +
+    (scaleEnabled ? "ON" : "OFF") +
+    " " +
+    scaleMode;
+
+  g.select_font_face("Helvetica", "normal", "normal");
+  g.set_font_size(10);
+  g.set_source_rgba(colors.label);
+  g.move_to(8, 16);
+  g.show_text(line1);
+
+  g.set_font_size(9);
+  g.set_source_rgba(colors.labelMuted);
+  g.move_to(8, 28);
+  g.show_text(line2);
+}
+
 function paint() {
   var g = mgraphics;
   var snapHdr = _getActivePageSnapshot();
   var uiMode = String(snapHdr.d.get("ui_mode") || mode || "page").toLowerCase();
   var uiMix = String(snapHdr.d.get("ui_mix_target") || selectedAttr || "vel").toLowerCase();
-  var scalePath = ["banks", snapHdr.bank, "pages", snapHdr.page, "scale"].join("::");
-  var scaleEnabled = !!snapHdr.d.get(scalePath + "::enabled");
-  var scaleMode = String(snapHdr.d.get(scalePath + "::mode") || "maj").toUpperCase();
   mode = uiMode;
   selectedAttr = uiMix;
 
@@ -86,14 +121,7 @@ function paint() {
   g.rectangle(0, 0, box.rect[2], box.rect[3]);
   g.fill();
 
-  // Persistent context labels (mode + edit lens + focus + page scale state)
-  g.set_source_rgba(colors.label);
-  g.select_font_face("Courier", "normal", "normal");
-  g.set_font_size(10);
-  g.move_to(8, 18);
-  g.show_text("MODE " + mode.toUpperCase() + "  ATR " + selectedAttr.toUpperCase() + "  TRK " + selectedTrack + "  STP " + selectedStep);
-  g.move_to(8, 30);
-  g.show_text("BANK " + snapHdr.bank + "  PAGE " + snapHdr.page + "  SCALE " + (scaleEnabled ? "ON" : "OFF") + " " + scaleMode);
+  _paintStatusHeader(g, snapHdr);
 
   if (mode === "grid") {
     _paintGrid(g);
@@ -110,9 +138,11 @@ function paint() {
 
   var snap = _getActivePageSnapshot();
   // Draw grid
+  g.select_font_face("Helvetica", "normal", "normal");
+  g.set_font_size(9);
   for (var r = 0; r < rows; r++) {
     // track label
-    g.set_source_rgba(colors.label);
+    g.set_source_rgba(colors.labelMuted);
     g.move_to(10, padTop + r * (cell + gap) + cell - 3);
     g.show_text(String(r));
 
@@ -151,8 +181,10 @@ function _paintGrid(g) {
   var ab = _clampInt(ap.bank, 0, 9);
   var apg = _clampInt(ap.page, 0, 15);
 
+  g.select_font_face("Helvetica", "normal", "normal");
+  g.set_font_size(9);
   for (var r = 0; r < rows; r++) {
-    g.set_source_rgba(colors.label);
+    g.set_source_rgba(colors.labelMuted);
     g.move_to(10, padTop + r * (cell + gap) + cell - 3);
     g.show_text(String(r));
 
@@ -173,10 +205,6 @@ function _paintGrid(g) {
 
 function _paintTrack(g) {
   // Row 0: step toggles for selectedTrack
-  g.set_source_rgba(colors.label);
-  g.move_to(8, 36);
-  g.show_text("TRK " + selectedTrack + "  ATR " + selectedAttr.toUpperCase());
-
   var snap = _getActivePageSnapshot();
   var tr = snap.tracks[selectedTrack] || {};
   var trSteps = tr.steps || [];
@@ -245,14 +273,16 @@ function _paintStep(g) {
   var sta = Number(d.get(base + "::sta_offset") || 0);
   var strum = Number(d.get(base + "::strum") || 0);
 
+  g.select_font_face("Helvetica", "normal", "normal");
+  g.set_font_size(10);
   g.set_source_rgba(colors.label);
-  g.move_to(8, 36);
+  g.move_to(8, 46);
   g.show_text("TRK " + selectedTrack + " STEP " + selectedStep);
-  g.move_to(8, 56);
+  g.move_to(8, 66);
   g.show_text("ACTIVE " + active + "  SKIP " + skip);
-  g.move_to(8, 76);
+  g.move_to(8, 86);
   g.show_text("PIT " + pit + "  VEL " + vel);
-  g.move_to(8, 96);
+  g.move_to(8, 106);
   g.show_text("LEN " + len + "  STA " + sta + "  STR " + strum);
 }
 
