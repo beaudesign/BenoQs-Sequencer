@@ -35,3 +35,7 @@ Run before tagging a release. Environment: Live **12.3.6+** (or documented minim
 ## Regression
 
 - [ ] No repeated `print` spam in Max window (production build).
+
+## Performance
+
+- [ ] With transport running, CPU stays reasonable; `tick` does not call full `ensure_state()` each step (dict repair + meter sync only on load / `qmetro` / rare missing dict).

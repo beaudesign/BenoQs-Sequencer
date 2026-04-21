@@ -1,7 +1,7 @@
 autowatch = 1;
 
 /**
- * Octopus state is stored in a Max Dict named by STATE_DICT_NAME.
+ * BenoQs / Octopus state is stored in a Max Dict named by STATE_DICT_NAME.
  * This file provides:
  * - deterministic default state creation
  * - schema enforcement (best-effort) + range clamping helpers
@@ -253,7 +253,6 @@ function ensure_state() {
 
   if (changed) outlet(0, "state_repaired");
   outlet(0, "state_ok");
-  sync_time_signature_from_live();
 }
 
 function get_active_page() {

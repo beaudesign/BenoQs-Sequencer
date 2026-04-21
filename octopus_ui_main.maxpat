@@ -65,6 +65,16 @@
       },
       {
         "box" : {
+          "id" : "trigger-load-1",
+          "maxclass" : "newobj",
+          "text" : "t b b",
+          "numinlets" : 1,
+          "numoutlets" : 2,
+          "patching_rect" : [ 300.0, 88.0, 40.0, 22.0 ]
+        }
+      },
+      {
+        "box" : {
           "id" : "loadbang-1",
           "maxclass" : "loadbang",
           "patching_rect" : [ 320.0, 60.0, 30.0, 30.0 ]
@@ -532,7 +542,9 @@
       }
     ],
     "lines" : [
-      { "patchline" : { "source" : [ "loadbang-1", 0 ], "destination" : [ "msg-init-1", 0 ] } },
+      { "patchline" : { "source" : [ "loadbang-1", 0 ], "destination" : [ "trigger-load-1", 0 ] } },
+      { "patchline" : { "source" : [ "trigger-load-1", 0 ], "destination" : [ "msg-init-1", 0 ] } },
+      { "patchline" : { "source" : [ "trigger-load-1", 1 ], "destination" : [ "msg-sync-ts-1", 0 ] } },
       { "patchline" : { "source" : [ "loadbang-1", 0 ], "destination" : [ "toggle-1", 0 ] } },
       { "patchline" : { "source" : [ "toggle-1", 0 ], "destination" : [ "qmetro-1", 0 ] } },
       { "patchline" : { "source" : [ "qmetro-1", 0 ], "destination" : [ "msg-gettempo-1", 0 ] } },

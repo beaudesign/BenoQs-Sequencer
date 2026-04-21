@@ -199,10 +199,14 @@ function transport_state(v) {
 function tick() {
   if (!running) return;
 
-  ensure_state(); // from octopus_data.js; ensures dict exists
+  // Hot path: do not call ensure_state() here (it runs schema repair + Live API sync).
+  // Only repair if the dict is missing (e.g. first tick before loadbang completed).
   var d = new Dict(STATE_DICT_NAME);
-  var grid = d.getkeys ? d : null;
-  if (!grid) return;
+  if (!d.getkeys || d.getkeys() === null) {
+    ensure_state();
+    d = new Dict(STATE_DICT_NAME);
+    if (!d.getkeys || d.getkeys() === null) return;
+  }
 
   globalTick++;
 
