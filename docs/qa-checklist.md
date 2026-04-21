@@ -27,6 +27,7 @@ Run before tagging a release. Environment: Live **12.3.6+** (or documented minim
 ## Time signature
 
 - [ ] Change Live time signature (e.g. 4/4 → 3/4); header updates within ~1 s.
+- [ ] In **PAGE** mode, vertical beat guides move with meter (e.g. 4/4: every 4 steps; 3/4: roughly every 5–6 steps).
 
 ## Presets (developer)
 

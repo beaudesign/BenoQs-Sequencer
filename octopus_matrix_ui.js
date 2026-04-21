@@ -39,6 +39,8 @@ var colors = {
   label: [0.8, 0.8, 0.8, 1.0],
   labelMuted: [0.52, 0.52, 0.52, 1.0],
   sel: [1.0, 0.53, 0.0, 1.0],
+  // Vertical beat guides (PAGE view): stronger than offBorder
+  beatDiv: [0.48, 0.48, 0.48, 0.92],
 };
 
 function _clampInt(v, min, max) {
@@ -117,6 +119,33 @@ function _paintStatusHeader(g, snapHdr) {
   g.show_text(line2);
 }
 
+// Assumes 16 steps = one bar of 16th notes; steps per beat = 16 / numerator (e.g. 4/4 → 4).
+function _stepsPerBeatFromMeter(d) {
+  var ts = d.get("live_time_signature") || {};
+  var num = _clampInt(ts.numerator != null ? ts.numerator : 4, 1, 32);
+  var spb = Math.round(16 / num);
+  if (spb < 1) spb = 1;
+  if (spb > 16) spb = 16;
+  return spb;
+}
+
+function _paintBeatBoundaries(g, snap) {
+  var stepsPerBeat = _stepsPerBeatFromMeter(snap.d);
+  if (stepsPerBeat <= 1 || stepsPerBeat >= cols) return;
+
+  var y0 = padTop - 0.5;
+  var y1 = padTop + (rows - 1) * (cell + gap) + cell + 0.5;
+
+  g.set_source_rgba(colors.beatDiv);
+  g.set_line_width(1.65);
+  for (var c = stepsPerBeat; c < cols; c += stepsPerBeat) {
+    var x = padLeft + c * (cell + gap) - gap * 0.5;
+    g.move_to(x, y0);
+    g.line_to(x, y1);
+    g.stroke();
+  }
+}
+
 function paint() {
   var g = mgraphics;
   var snapHdr = _getActivePageSnapshot();
@@ -145,6 +174,8 @@ function paint() {
   }
 
   var snap = _getActivePageSnapshot();
+  _paintBeatBoundaries(g, snap);
+
   // Draw grid
   g.select_font_face("Helvetica", "normal", "normal");
   g.set_font_size(9);

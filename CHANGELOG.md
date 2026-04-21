@@ -14,6 +14,10 @@ All notable changes to this project are documented in this file.
 ### Fixed
 
 - Engine `tick()` no longer calls full `ensure_state()` every step (dict repair + meter sync was unnecessarily hot); meter sync stays on `qmetro` + load sequence only.
+
+### Changed
+
+- PAGE matrix: vertical **beat boundary** guides from Live time signature (16 steps = one bar of 16ths; e.g. 4/4 → line every 4 steps).
 - `demos/README.md` and `presets/README.md` for demo set and preset usage.
 - Build output renamed to **`BenoQs.amxd`** (see `tools/build_amxd.py`).
 

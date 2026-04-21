@@ -37,6 +37,7 @@ The **MIX** target (VEL, PIT, LEN, …) selects which parameter the UI and encod
 - Follows **Ableton Live** transport (host clock).
 - **STOP/PLAY** controls map to engine run state.
 - **Time signature** shown in the matrix header reflects Live’s meter when the Live API is available.
+- In **PAGE** mode, **vertical beat guides** subdivide the 16-step row using the current meter: the bar is treated as 16 sixteenth notes, so beat length in steps is approximately `16 ÷ numerator` (e.g. 4/4 → guides every 4 steps).
 
 ## 7. MIDI routing
 
