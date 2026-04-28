@@ -21,25 +21,27 @@ This project recreates that spirit in a modern hybrid setup using Max/MSP and Ab
 
 ## Canonical install
 
-1. Build or clone the repository so **`BenoQs.amxd`** sits in the **same folder** as `octopus_data.js`, `octopus_engine.js`, `octopus_matrix_ui.js`, `octopus_ui.js`, and `octopus_scale.js`.
-2. Drag **`BenoQs.amxd`** onto a MIDI track in Ableton Live, or copy it into your User Library under **Presets → MIDI Effects → Max MIDI Effect** (see [docs/installation.md](docs/installation.md)).
+1. Build or clone the repository so `**BenoQs.amxd`** sits in the **same folder** as `octopus_data.js`, `octopus_engine.js`, `octopus_matrix_ui.js`, `octopus_ui.js`, and `octopus_scale.js`.
+2. Drag `**BenoQs.amxd`** onto a MIDI track in Ableton Live, or copy it into your User Library under **Presets → MIDI Effects → Max MIDI Effect** (see [docs/installation.md](docs/installation.md)).
 
 ---
 
 ## Documentation
 
-| Document | Description |
-|----------|-------------|
-| [docs/installation.md](docs/installation.md) | Where to put the device, build requirements, troubleshooting |
-| [docs/compatibility.md](docs/compatibility.md) | Live / Max versions, time signature behaviour |
-| [docs/manual.md](docs/manual.md) | User manual (outline) |
-| [docs/faq.md](docs/faq.md) | Frequently asked questions |
-| [docs/push-mapping.md](docs/push-mapping.md) | Push integration spec (planned) |
-| [docs/qa-checklist.md](docs/qa-checklist.md) | Release smoke test |
-| [docs/release-process.md](docs/release-process.md) | Tagging and shipping |
-| [demos/README.md](demos/README.md) | How to build a demo Live Set |
-| [presets/README.md](presets/README.md) | Factory preset indices |
-| [CHANGELOG.md](CHANGELOG.md) | Version history |
+
+| Document                                           | Description                                                  |
+| -------------------------------------------------- | ------------------------------------------------------------ |
+| [docs/installation.md](docs/installation.md)       | Where to put the device, build requirements, troubleshooting |
+| [docs/compatibility.md](docs/compatibility.md)     | Live / Max versions, time signature behaviour                |
+| [docs/manual.md](docs/manual.md)                   | User manual (outline)                                        |
+| [docs/faq.md](docs/faq.md)                         | Frequently asked questions                                   |
+| [docs/push-mapping.md](docs/push-mapping.md)       | Push integration spec (planned)                              |
+| [docs/qa-checklist.md](docs/qa-checklist.md)       | Release smoke test                                           |
+| [docs/release-process.md](docs/release-process.md) | Tagging and shipping                                         |
+| [demos/README.md](demos/README.md)                 | How to build a demo Live Set                                 |
+| [presets/README.md](presets/README.md)             | Factory preset indices                                       |
+| [CHANGELOG.md](CHANGELOG.md)                       | Version history                                              |
+
 
 ---
 
@@ -59,20 +61,22 @@ From the repo root (macOS default Live path can be edited in the script):
 python3 tools/build_amxd.py
 ```
 
-Writes **`BenoQs.amxd`** next to the source `.js` files.
+Writes `**BenoQs.amxd**` next to the source `.js` files.
 
 ---
 
 ## Features (summary)
 
-| Feature | Description |
-|---------|-------------|
-| Multi-layered sequencing | Grid, Page, Track, and Step hierarchy |
-| Experimental timing | Tempo multipliers, groove/shuffle, step offsets |
-| Modular-first design | MIDI routing for hardware |
-| Pattern behaviour | Skip, directions, chaining (MVP scope) |
-| Polyphonic steps | Chords / strum (engine) |
-| Live integration | Transport sync + **time signature** display from Live |
+
+| Feature                  | Description                                           |
+| ------------------------ | ----------------------------------------------------- |
+| Multi-layered sequencing | Grid, Page, Track, and Step hierarchy                 |
+| Experimental timing      | Tempo multipliers, groove/shuffle, step offsets       |
+| Modular-first design     | MIDI routing for hardware                             |
+| Pattern behaviour        | Skip, directions, chaining (MVP scope)                |
+| Polyphonic steps         | Chords / strum (engine)                               |
+| Live integration         | Transport sync + **time signature** display from Live |
+
 
 ---
 
