@@ -1,0 +1,59 @@
+#!/usr/bin/env node
+// Tiny test runner. Loads Max modules into a vm context, then runs all
+// registered test suites. Exits non-zero on any failure.
+
+var shim = require("./max_shim");
+var schedulerTests = require("./scheduler.test");
+
+var ctx = shim.createMaxContext();
+ctx.include("octopus_scheduler.js"); // pulls in octopus_scale.js via its own include()
+
+var pass = 0;
+var fail = 0;
+var failures = [];
+
+function makeTester(suiteName) {
+  function t(name, body) {
+    var failedHere = false;
+    var localFailures = [];
+
+    t.eq = function (actual, expected, msg) {
+      if (actual !== expected) {
+        failedHere = true;
+        localFailures.push((msg || "eq") + ": expected " + JSON.stringify(expected) + ", got " + JSON.stringify(actual));
+      }
+    };
+    t.ok = function (cond, msg) {
+      if (!cond) {
+        failedHere = true;
+        localFailures.push((msg || "ok") + ": condition false");
+      }
+    };
+
+    try {
+      body();
+    } catch (e) {
+      failedHere = true;
+      localFailures.push("threw: " + (e && e.stack || e));
+    }
+
+    if (failedHere) {
+      fail++;
+      failures.push({ suite: suiteName, name: name, msgs: localFailures });
+      process.stdout.write("  ✗ " + name + "\n");
+      for (var i = 0; i < localFailures.length; i++) {
+        process.stdout.write("      " + localFailures[i] + "\n");
+      }
+    } else {
+      pass++;
+      process.stdout.write("  ✓ " + name + "\n");
+    }
+  }
+  return t;
+}
+
+process.stdout.write("\nscheduler.test.js\n");
+schedulerTests.run(ctx, makeTester("scheduler"));
+
+process.stdout.write("\n" + pass + " passed, " + fail + " failed\n");
+process.exit(fail === 0 ? 0 : 1);
