@@ -57,6 +57,24 @@
       },
       {
         "box" : {
+          "id" : "msg-sync-ts-1",
+          "maxclass" : "message",
+          "text" : "sync_time_signature_from_live",
+          "patching_rect" : [ 320.0, 48.0, 200.0, 22.0 ]
+        }
+      },
+      {
+        "box" : {
+          "id" : "trigger-load-1",
+          "maxclass" : "newobj",
+          "text" : "t b b",
+          "numinlets" : 1,
+          "numoutlets" : 2,
+          "patching_rect" : [ 300.0, 88.0, 40.0, 22.0 ]
+        }
+      },
+      {
+        "box" : {
           "id" : "loadbang-1",
           "maxclass" : "loadbang",
           "patching_rect" : [ 320.0, 60.0, 30.0, 30.0 ]
@@ -524,10 +542,14 @@
       }
     ],
     "lines" : [
-      { "patchline" : { "source" : [ "loadbang-1", 0 ], "destination" : [ "msg-init-1", 0 ] } },
+      { "patchline" : { "source" : [ "loadbang-1", 0 ], "destination" : [ "trigger-load-1", 0 ] } },
+      { "patchline" : { "source" : [ "trigger-load-1", 0 ], "destination" : [ "msg-init-1", 0 ] } },
+      { "patchline" : { "source" : [ "trigger-load-1", 1 ], "destination" : [ "msg-sync-ts-1", 0 ] } },
       { "patchline" : { "source" : [ "loadbang-1", 0 ], "destination" : [ "toggle-1", 0 ] } },
       { "patchline" : { "source" : [ "toggle-1", 0 ], "destination" : [ "qmetro-1", 0 ] } },
       { "patchline" : { "source" : [ "qmetro-1", 0 ], "destination" : [ "msg-gettempo-1", 0 ] } },
+      { "patchline" : { "source" : [ "qmetro-1", 0 ], "destination" : [ "msg-sync-ts-1", 0 ] } },
+      { "patchline" : { "source" : [ "msg-sync-ts-1", 0 ], "destination" : [ "js-data-1", 0 ] } },
       { "patchline" : { "source" : [ "msg-gettempo-1", 0 ], "destination" : [ "transport-1", 0 ] } },
       { "patchline" : { "source" : [ "transport-1", 6 ], "destination" : [ "gate-1", 1 ] } },
       { "patchline" : { "source" : [ "transport-1", 4 ], "destination" : [ "expr-tps-1", 0 ] } },

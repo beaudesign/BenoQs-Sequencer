@@ -1,14 +1,17 @@
 autowatch = 1;
 
 /**
- * Octopus state is stored in a Max Dict named by STATE_DICT_NAME.
+ * BenoQs / Octopus state is stored in a Max Dict named by STATE_DICT_NAME.
  * This file provides:
  * - deterministic default state creation
  * - schema enforcement (best-effort) + range clamping helpers
  * - small set of getters/setters for engine/UI
+ * - preset dispatch (delegates content to octopus_presets.js)
  *
  * NOTE: Max's JS runtime is not Node; avoid require(). Use include() from other JS files.
  */
+
+include("octopus_presets.js"); // applyPresetToDict, buildPresetMutations
 
 var STATE_DICT_NAME = "octopus_state";
 
@@ -150,6 +153,7 @@ function defaultGrid() {
     tempo_bpm: 120.0,
     midi_port1_channel: 1,
     active_page: { bank: 0, page: 0 },
+    live_time_signature: { numerator: 4, denominator: 4 },
     page_sets: pageSets,
     global_scale: defaultGlobalScale(),
     banks: banks,
@@ -171,10 +175,49 @@ function reset_state() {
   outlet(0, "state_reset");
 }
 
+// ---------- Live time signature (mirrors Live transport meter) ----------
+function _bangMatrixRedraw() {
+  try {
+    if (typeof this !== "undefined" && this.patcher) {
+      var m = this.patcher.getnamed("jsui-matrix-1");
+      if (m) m.message("bang");
+    }
+  } catch (e) {}
+}
+
+function set_time_signature(num, den) {
+  num = clampInt(num, 1, 32);
+  den = clampInt(den, 1, 32);
+  var d = getStateDict();
+  var cur = d.get("live_time_signature");
+  var same =
+    cur &&
+    clampInt(cur.numerator, 1, 32) === num &&
+    clampInt(cur.denominator, 1, 32) === den;
+  d.set("live_time_signature", { numerator: num, denominator: den });
+  outlet(0, "time_signature", num, den);
+  if (!same) _bangMatrixRedraw();
+}
+
+function sync_time_signature_from_live() {
+  if (typeof LiveAPI === "undefined") return;
+  try {
+    var api = new LiveAPI("live_set");
+    var n = api.get("signature_numerator");
+    var de = api.get("signature_denominator");
+    var num = Array.isArray(n) ? n[0] : n;
+    var den = Array.isArray(de) ? de[0] : de;
+    num = clampInt(num, 1, 32);
+    den = clampInt(den, 1, 32);
+    set_time_signature(num, den);
+  } catch (e) {}
+}
+
 function ensure_state() {
   var d = getStateDict();
   if (!d.getkeys || d.getkeys() === null) {
     reset_state();
+    sync_time_signature_from_live();
     return;
   }
   var changed = 0;
@@ -192,6 +235,7 @@ function ensure_state() {
   ensureRoot("midi_routing_mode");
   ensureRoot("fixed_routing");
   ensureRoot("tempo_bpm");
+  ensureRoot("live_time_signature");
 
   // Repair active page shape/ranges without wiping other state.
   var ap = d.get("active_page") || {};
@@ -357,6 +401,26 @@ function rec_toggle() {
   var armed = asBool(d.get("record_armed"));
   d.set("record_armed", !armed);
   outlet(0, "record_armed", !armed ? 1 : 0);
+}
+
+// ---------- Factory presets (indices 0..3) ----------
+// Preset 0 = reset. Presets 1..3 are defined in octopus_presets.js.
+function apply_preset(id) {
+  id = clampInt(id, 0, 3);
+  if (id === 0) {
+    reset_state();
+    _bangMatrixRedraw();
+    outlet(0, "preset_applied", 0);
+    return;
+  }
+  reset_state();
+  applyPresetToDict(getStateDict(), id);
+  _bangMatrixRedraw();
+  outlet(0, "preset_applied", id);
+}
+
+function preset(id) {
+  apply_preset(clampInt(id, 0, 3));
 }
 
 // ---------- Dump helpers ----------
