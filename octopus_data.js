@@ -6,9 +6,12 @@ autowatch = 1;
  * - deterministic default state creation
  * - schema enforcement (best-effort) + range clamping helpers
  * - small set of getters/setters for engine/UI
+ * - preset dispatch (delegates content to octopus_presets.js)
  *
  * NOTE: Max's JS runtime is not Node; avoid require(). Use include() from other JS files.
  */
+
+include("octopus_presets.js"); // applyPresetToDict, buildPresetMutations
 
 var STATE_DICT_NAME = "octopus_state";
 
@@ -401,6 +404,7 @@ function rec_toggle() {
 }
 
 // ---------- Factory presets (indices 0..3) ----------
+// Preset 0 = reset. Presets 1..3 are defined in octopus_presets.js.
 function apply_preset(id) {
   id = clampInt(id, 0, 3);
   if (id === 0) {
@@ -410,60 +414,7 @@ function apply_preset(id) {
     return;
   }
   reset_state();
-  var d = getStateDict();
-  var b = 0;
-  var p = 0;
-
-  function stepPath(ti, si) {
-    return [
-      "banks", b, "pages", p, "tracks", ti, "steps", si,
-    ].join("::");
-  }
-
-  if (id === 1) {
-    for (var t = 0; t < 10; t++) {
-      for (var s = 0; s < 16; s++) d.set(stepPath(t, s) + "::active", 0);
-      d.set(stepPath(t, 0) + "::active", 1);
-      d.set(stepPath(t, 4) + "::active", 1);
-      d.set(stepPath(t, 8) + "::active", 1);
-      d.set(stepPath(t, 12) + "::active", 1);
-    }
-  } else if (id === 2) {
-    var pagePath = ["banks", b, "pages", p].join("::");
-    d.set(pagePath + "::len", 16);
-    var pats = [
-      [0, 4, 8, 12],
-      [0, 3, 6, 9],
-      [0, 2, 5, 7],
-      [0, 1, 2, 3],
-      [0, 8],
-      [0, 2, 4],
-      [0, 3, 7, 11],
-      [0, 4, 8],
-      [0, 6, 12],
-      [0, 2, 4, 6, 8],
-    ];
-    for (var ti = 0; ti < 10; ti++) {
-      for (var s = 0; s < 16; s++) d.set(stepPath(ti, s) + "::active", 0);
-      for (var j = 0; j < pats[ti].length; j++) {
-        var si = pats[ti][j];
-        d.set(stepPath(ti, si) + "::active", 1);
-      }
-    }
-  } else if (id === 3) {
-    var pageScalePath = ["banks", b, "pages", p, "scale"].join("::");
-    d.set(pageScalePath + "::enabled", 1);
-    d.set(pageScalePath + "::mode", "maj");
-    d.set(pageScalePath + "::intervals", [0, 2, 4, 5, 7, 9, 11]);
-    for (var t2 = 0; t2 < 10; t2++) {
-      for (var s2 = 0; s2 < 16; s2++) {
-        var on = s2 % 2 === 0 && (t2 + s2) % 3 === 0 ? 1 : 0;
-        d.set(stepPath(t2, s2) + "::active", on);
-      }
-    }
-  }
-
-  d.set("active_page", { bank: b, page: p });
+  applyPresetToDict(getStateDict(), id);
   _bangMatrixRedraw();
   outlet(0, "preset_applied", id);
 }

@@ -45,6 +45,9 @@ The `{bank, page}` pair the **Engine** is currently playing and the **Matrix UI*
 **Page Set**:
 A user-defined ordered list of `{bank, page}` pairs in one of 16 slots; used to chain pages for performance. Not currently played by the **Engine**.
 
+**Preset**:
+A factory pattern identified by id 0..3. Preset 0 = reset. Presets 1..3 are pure content defined in `octopus_presets.js` as a list of Dict mutations. Mutations are `{path, value}` records keyed by **State Dict** path. Applying a preset writes the mutations and sets the **Active Page** to bank 0 / page 0.
+
 ### Playback
 
 **Engine** (`octopus_engine.js`):

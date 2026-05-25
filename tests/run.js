@@ -4,9 +4,11 @@
 
 var shim = require("./max_shim");
 var schedulerTests = require("./scheduler.test");
+var presetsTests = require("./presets.test");
 
 var ctx = shim.createMaxContext();
 ctx.include("octopus_scheduler.js"); // pulls in octopus_scale.js via its own include()
+ctx.include("octopus_presets.js");
 
 var pass = 0;
 var fail = 0;
@@ -54,6 +56,9 @@ function makeTester(suiteName) {
 
 process.stdout.write("\nscheduler.test.js\n");
 schedulerTests.run(ctx, makeTester("scheduler"));
+
+process.stdout.write("\npresets.test.js\n");
+presetsTests.run(ctx, makeTester("presets"));
 
 process.stdout.write("\n" + pass + " passed, " + fail + " failed\n");
 process.exit(fail === 0 ? 0 : 1);
