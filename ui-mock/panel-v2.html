@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>BenoQs Panel v2 — pixel-anchored layout</title>
+<style>
+  /* Tokens chosen to match index.html where possible (Pivot/Tonality calm paper) */
+  :root {
+    --bg: #f2efe8;
+    --bg-panel: #e9e5dc;
+    --engraved: rgba(20,16,10,.42);
+    --engraved-strong: rgba(20,16,10,.62);
+    --hairline: rgba(20,16,10,.10);
+    --green: #3cb818;
+    --red: #c41c1c;
+    --orange: #d97818;
+    --root: #c97818;
+    --led-idle: #b8b4ac;
+    --font: "Helvetica Neue", -apple-system, system-ui, sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; background: var(--bg); font-family: var(--font); }
+  .stage {
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    padding: 8px;
+  }
+  svg.panel { width: 100%; height: 100%; max-height: 100vh; }
+
+  /* Engraved label style (rendered as SVG text). */
+  .label { fill: var(--engraved); font-family: var(--font); }
+  .label-strong { fill: var(--engraved-strong); }
+  .label-italic { font-style: italic; }
+
+  /* Default LED appearance — small ball, idle. */
+  .led { stroke: rgba(20,16,10,.18); stroke-width: 0.8; }
+  .led-sm { /* matrix / sel / mut / attribute selector */ }
+  .led-md { /* mix target strip, chord notes, scale ring */ }
+  .led-lg { /* mode block etc. */ }
+
+  /* Encoder shaft (large chrome rotary). */
+  .encoder { stroke: rgba(20,16,10,.20); stroke-width: 1; }
+
+  /* Hairline guide for matrix beat divisions; faint until enabled. */
+  .beat-guide { stroke: rgba(20,16,10,.20); stroke-width: 1; }
+
+  /* Faint outer ring around the Circle area for orientation. */
+  .guide-ring { fill: none; stroke: var(--hairline); stroke-width: 1; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <svg class="panel" viewBox="0 0 2400 1300" xmlns="http://www.w3.org/2000/svg" id="panel-svg" aria-label="BenoQs Panel">
+    <defs>
+      <!-- Chrome encoder gradient: highlight top-left, shadow bottom-right. -->
+      <radialGradient id="chrome" cx="35%" cy="30%" r="70%">
+        <stop offset="0%"   stop-color="#f4f1ea"/>
+        <stop offset="40%"  stop-color="#cfcbc2"/>
+        <stop offset="80%"  stop-color="#a8a49b"/>
+        <stop offset="100%" stop-color="#878379"/>
+      </radialGradient>
+      <radialGradient id="chrome-sm" cx="35%" cy="30%" r="70%">
+        <stop offset="0%"   stop-color="#ede9e0"/>
+        <stop offset="55%"  stop-color="#c4c0b7"/>
+        <stop offset="100%" stop-color="#928e85"/>
+      </radialGradient>
+      <radialGradient id="led-off" cx="40%" cy="35%" r="65%">
+        <stop offset="0%"   stop-color="#e0dcd2"/>
+        <stop offset="60%"  stop-color="#bcb8af"/>
+        <stop offset="100%" stop-color="#969286"/>
+      </radialGradient>
+    </defs>
+
+    <!-- Panel face (cream) -->
+    <rect x="0" y="0" width="2400" height="1300" fill="var(--bg-panel)"/>
+
+    <!-- Wordmarks (top corners) -->
+    <text x="60"   y="60" class="label" font-size="22">genoQs Machines</text>
+    <text x="2340" y="60" class="label label-italic label-strong" font-size="32" text-anchor="end">octopus</text>
+
+    <!-- All interactive elements injected by JS below for readability. -->
+    <g id="g-clefs"   ></g>
+    <g id="g-rownums" ></g>
+    <g id="g-mix"     ></g>
+    <g id="g-sel"     ></g>
+    <g id="g-matrix"  ></g>
+    <g id="g-beats"   ></g>
+    <g id="g-attr"    ></g>
+    <g id="g-mut"     ></g>
+    <g id="g-edit"    ></g>
+    <g id="g-bottom"  ></g>
+    <g id="g-circle"  ></g>
+    <g id="g-chord"   ></g>
+    <g id="g-labels"  ></g>
+  </svg>
+</div>
+
+<script>
+"use strict";
+
+/* ── Geometry constants (all viewBox units; 1u ≈ 1mm at full panel size) ── */
+const PANEL_W = 2400, PANEL_H = 1300;
+
+const ROW_COUNT = 10;
+const ROW_PITCH = 60;
+const MATRIX_TOP_Y = 250;        // center of row 9 (top-most)
+const rowY = (r) => MATRIX_TOP_Y + (ROW_COUNT - 1 - r) * ROW_PITCH;  // r=9 top, r=0 bottom
+
+const COL_COUNT = 16;
+const COL_PITCH = 56;
+const MATRIX_LEFT_X = 350;       // center of col 0
+const colX = (c) => MATRIX_LEFT_X + c * COL_PITCH;
+
+/* Column block centers (X). */
+const X_CLEF    = 50;
+const X_ROWNUM  = 100;
+const X_MIX     = 175;
+const X_SEL     = 260;
+const X_ATTR    = 1310;          // right of last matrix col (col 15 center = 350+15*56 = 1190; right edge of cell = 1218)
+const X_MUT     = 1380;
+const X_EDIT    = 1465;
+
+/* Circle area. */
+const C_CX = 1880, C_CY = 600;
+const R_OUTER = 350;
+const R_INNER = 170;
+const R_MODE  = 110;             // inner mode-block radius
+
+/* Chord column on the right. */
+const X_CHORD       = 2300;
+const CHORD_TOP_Y   = 260;
+const CHORD_PITCH   = 60;
+const CHORD_COUNT   = 7;         // 7 chord-note slots per reference manual §Chords
+
+/* Bottom strip (MIX TARGET row + labels). */
+const Y_MIX_TARGET  = 940;
+const Y_LABEL_BAND  = 1010;
+
+/* Element sizes. */
+const R_BALL_SM = 16;            // matrix, SEL, MUT, attribute selectors, scale notes
+const R_BALL_MD = 20;            // chord column, mix target
+const R_BALL_LG = 26;            // mode block, transport
+const R_ENC     = 32;            // mix / edit / main encoders
+const R_ENC_MAIN = 38;           // top-right master/main encoder
+
+/* ── DOM helpers ── */
+const SVG_NS = "http://www.w3.org/2000/svg";
+function el(tag, attrs, parent) {
+  const node = document.createElementNS(SVG_NS, tag);
+  for (const k in attrs) node.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(node);
+  return node;
+}
+function text(parent, x, y, str, opts) {
+  opts = opts || {};
+  const t = el("text", {
+    x, y,
+    "text-anchor": opts.anchor || "middle",
+    "dominant-baseline": opts.baseline || "central",
+    "font-size": opts.size || 14,
+    class: "label " + (opts["class"] || ""),
+  }, parent);
+  t.textContent = str;
+  return t;
+}
+
+function ledBall(parent, id, cx, cy, r, kind) {
+  return el("circle", {
+    id,
+    cx, cy, r,
+    class: "led led-" + (kind || "sm"),
+    fill: "url(#led-off)",
+    "data-state": "off",
+  }, parent);
+}
+
+function encoder(parent, id, cx, cy, r) {
+  // Outer shaft + inner cap; simple two-circle representation
+  const g = el("g", { id, class: "encoder-group" }, parent);
+  el("circle", { cx, cy, r, class: "encoder", fill: "url(#chrome)" }, g);
+  el("circle", { cx: cx - r * 0.18, cy: cy - r * 0.18, r: r * 0.42, fill: "rgba(255,255,255,.18)" }, g);
+  // indicator notch (top-left default)
+  el("circle", { cx: cx - r * 0.55, cy: cy - r * 0.55, r: r * 0.10, fill: "rgba(20,16,10,.55)" }, g);
+  return g;
+}
+
+/* ── 1. Clefs and track row numbers ── */
+const gClefs   = document.getElementById("g-clefs");
+const gRownums = document.getElementById("g-rownums");
+// Treble clef glyph for rows 9..5, bass clef for rows 4..0 (Unicode musical symbols).
+text(gClefs, X_CLEF, rowY(7), "\u{1D11E}", { size: 56, "class": "label-strong" });
+text(gClefs, X_CLEF, rowY(2), "\u{1D122}", { size: 56, "class": "label-strong" });
+for (let r = 0; r < ROW_COUNT; r++) {
+  text(gRownums, X_ROWNUM, rowY(r), String(r), { size: 22 });
+}
+
+/* ── 2. MIX encoder column (10 large rotaries) ── */
+const gMix = document.getElementById("g-mix");
+for (let r = 0; r < ROW_COUNT; r++) {
+  encoder(gMix, `mix-encoder-${r}`, X_MIX, rowY(r), R_ENC);
+}
+
+/* ── 3. SEL button column (10 small balls) ── */
+const gSel = document.getElementById("g-sel");
+for (let r = 0; r < ROW_COUNT; r++) {
+  ledBall(gSel, `sel-${r}`, X_SEL, rowY(r), R_BALL_SM, "sm");
+}
+
+/* ── 4. Matrix (10 rows × 16 cols) ── */
+const gMatrix = document.getElementById("g-matrix");
+for (let r = 0; r < ROW_COUNT; r++) {
+  for (let c = 0; c < COL_COUNT; c++) {
+    ledBall(gMatrix, `matrix-r${r}-c${c}`, colX(c), rowY(r), R_BALL_SM, "sm");
+  }
+}
+
+/* ── 4b. Faint beat-division guides (vertical, every 4 cols) ── */
+const gBeats = document.getElementById("g-beats");
+for (let c = 4; c < COL_COUNT; c += 4) {
+  const x = colX(c) - COL_PITCH / 2;
+  el("line", {
+    x1: x, y1: rowY(9) - R_BALL_SM - 6,
+    x2: x, y2: rowY(0) + R_BALL_SM + 6,
+    class: "beat-guide",
+  }, gBeats);
+}
+
+/* ── 4c. Column labels above the matrix (A..P, then 1..16) ──
+   The hardware shows musical-note labels in the top edge (key signature row). */
+const COL_LABELS = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B","C","C#","D","D#"];
+const gLabels = document.getElementById("g-labels");
+for (let c = 0; c < COL_COUNT; c++) {
+  text(gLabels, colX(c), rowY(9) - R_BALL_SM - 22, COL_LABELS[c], { size: 12, "class": "" });
+}
+
+/* ── 5. Attribute selector column (10 balls + engraved labels) ── */
+const ATTR_LABELS_TOP_TO_BOTTOM = ["VEL","PIT","LEN","STA","POS","DIR","AMT","GRV","MCC","MCH"];
+const gAttr = document.getElementById("g-attr");
+for (let i = 0; i < ROW_COUNT; i++) {
+  const r = 9 - i;  // top row = row 9
+  ledBall(gAttr, `attr-${ATTR_LABELS_TOP_TO_BOTTOM[i].toLowerCase()}`, X_ATTR, rowY(r), R_BALL_SM, "sm");
+  text(gLabels, X_ATTR + 28, rowY(r), ATTR_LABELS_TOP_TO_BOTTOM[i], { size: 14, anchor: "start", "class": "label-strong" });
+}
+
+/* ── 6. MUT button column ── */
+const gMut = document.getElementById("g-mut");
+for (let r = 0; r < ROW_COUNT; r++) {
+  ledBall(gMut, `mut-${r}`, X_MUT, rowY(r), R_BALL_SM, "sm");
+}
+
+/* ── 7. EDIT encoder column ── */
+const gEdit = document.getElementById("g-edit");
+for (let r = 0; r < ROW_COUNT; r++) {
+  encoder(gEdit, `edit-encoder-${r}`, X_EDIT, rowY(r), R_ENC);
+}
+
+/* ── 8. Bottom strip: MIX TARGET row + group labels ──
+   Hardware MIX TARGET row (under matrix) holds: TGL, RND, CPY, PST, CLR, SKP, MCC, ATR,
+   plus numbered selection stores 1..5. Total 16 slots aligning with matrix columns.
+   See reference manual §Step selection stores (pg 17) and §Mutator block. */
+const MIX_TARGET_LABELS = [
+  "TGL","RND","CPY","PST","CLR","SKP","MCC","ATR",
+  "1","2","3","4","5","CHN","FLT","RMX",
+];
+const gBottom = document.getElementById("g-bottom");
+for (let c = 0; c < COL_COUNT; c++) {
+  ledBall(gBottom, `mixtarget-${c}`, colX(c), Y_MIX_TARGET, R_BALL_MD, "md");
+  text(gLabels, colX(c), Y_MIX_TARGET + 36, MIX_TARGET_LABELS[c], { size: 10 });
+}
+
+/* Block group labels under their respective columns. */
+text(gLabels, X_MIX,    Y_LABEL_BAND + 50, "MIX",  { size: 18, "class": "label-strong" });
+text(gLabels, X_SEL,    Y_LABEL_BAND + 50, "SEL",  { size: 18, "class": "label-strong" });
+text(gLabels, X_MUT,    Y_LABEL_BAND + 50, "MUT",  { size: 18, "class": "label-strong" });
+text(gLabels, X_EDIT,   Y_LABEL_BAND + 50, "EDIT", { size: 18, "class": "label-strong" });
+text(gLabels, X_CHORD,  Y_LABEL_BAND + 50, "CHORD",{ size: 18, "class": "label-strong" });
+
+/* ── 9. The Circle ── */
+const gCircle = document.getElementById("g-circle");
+
+// Faint guide rings (orientation only).
+el("circle", { cx: C_CX, cy: C_CY, r: R_OUTER, class: "guide-ring" }, gCircle);
+el("circle", { cx: C_CX, cy: C_CY, r: R_INNER, class: "guide-ring" }, gCircle);
+el("circle", { cx: C_CX, cy: C_CY, r: R_MODE,  class: "guide-ring" }, gCircle);
+
+/* 9a. MAIN encoder + reset button (top-right of Circle, per Navigation Guide pg 13). */
+encoder(gCircle, "main-encoder", C_CX + R_OUTER * 0.55, C_CY - R_OUTER * 0.78, R_ENC_MAIN);
+ledBall(gCircle, "reset-button", C_CX + R_OUTER * 0.55, C_CY - R_OUTER * 0.78 + 80, R_BALL_SM, "sm");
+
+/* 9b. "200" key (top of Circle, tempo / bank toggle, per pg 11 Legacy changes). */
+ledBall(gCircle, "key-200", C_CX, C_CY - R_OUTER * 0.92, R_BALL_LG, "lg");
+text(gLabels, C_CX, C_CY - R_OUTER * 0.92 - 36, "200", { size: 11 });
+
+/* 9c. Tempo numeric display — top-left quadrant of the outer circle.
+   Hardware shows BPM as ~16 LED dots in a 4×4-ish numeric layout.
+   Reference manual §Master Tempo (pg 13). We render the dots as small balls. */
+const tempoCX = C_CX - R_OUTER * 0.62;
+const tempoCY = C_CY - R_OUTER * 0.42;
+const tempoSpan = 120, tempoStep = tempoSpan / 3;
+for (let row = 0; row < 4; row++) {
+  for (let col = 0; col < 4; col++) {
+    ledBall(gCircle,
+      `tempo-dot-${row}-${col}`,
+      tempoCX - tempoSpan / 2 + col * tempoStep,
+      tempoCY - tempoSpan / 2 + row * tempoStep,
+      R_BALL_SM * 0.55, "sm");
+  }
+}
+text(gLabels, tempoCX, tempoCY + tempoSpan / 2 + 28, "TEMPO", { size: 11 });
+
+/* 9d. SCALE note ring — bottom-left arc, 12 chromatic notes.
+   Manual §Composing scales (pg 70): 12-note ring with root highlighted in Orange. */
+const SCALE_NOTES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+// Scale ring takes the left half of the Circle (matches hardware photo:
+// 12 notes wrapping from near-bottom up through the left to near-top).
+// Transport occupies the lower-right quadrant so we avoid that range here.
+const SCALE_START_DEG = 100;   // just past bottom, going clockwise
+const SCALE_SWEEP_DEG = 160;   // ends near top-left (~260°)
+for (let i = 0; i < 12; i++) {
+  const a = (SCALE_START_DEG + (i / 11) * SCALE_SWEEP_DEG) * Math.PI / 180;
+  const rx = C_CX + Math.cos(a) * (R_OUTER * 0.82);
+  const ry = C_CY + Math.sin(a) * (R_OUTER * 0.82);
+  ledBall(gCircle, `scale-note-${i}`, rx, ry, R_BALL_SM, "sm");
+  text(gLabels, rx, ry + R_BALL_SM + 14, SCALE_NOTES[i], { size: 9 });
+}
+
+/* 9e. SCALE inner trio (MOD / SEL / CAD) — three buttons inside the scale arc.
+   Manual §Force to scale (pg 70). */
+const SCALE_INNER = [
+  { id: "scale-mod", lbl: "MOD", a: 200 },
+  { id: "scale-sel", lbl: "SEL", a: 225 },
+  { id: "scale-cad", lbl: "CAD", a: 250 },
+];
+SCALE_INNER.forEach(b => {
+  const a = b.a * Math.PI / 180;
+  const rx = C_CX + Math.cos(a) * (R_INNER + 30);
+  const ry = C_CY + Math.sin(a) * (R_INNER + 30);
+  ledBall(gCircle, b.id, rx, ry, R_BALL_MD, "md");
+  text(gLabels, rx, ry + R_BALL_MD + 16, b.lbl, { size: 10 });
+});
+text(gLabels, C_CX - R_OUTER * 0.18, C_CY + R_OUTER * 0.78, "SCALE", { size: 14, "class": "label-strong" });
+
+/* 9f. MODE block — inner ring with GRID / PAGE / TRACK / STEP / MAP / PLAY.
+   Manual §The MODE block (Nav Guide pg 24). Center-of-circle layout. */
+const MODE_BUTTONS = [
+  { id: "mode-grid",  lbl: "GRID",  a: -90  },
+  { id: "mode-page",  lbl: "PAGE",  a: -30  },
+  { id: "mode-track", lbl: "TRACK", a:  30  },
+  { id: "mode-step",  lbl: "STEP",  a:  90  },
+  { id: "mode-map",   lbl: "MAP",   a: 150  },
+  { id: "mode-play",  lbl: "PLAY",  a: 210  },
+];
+MODE_BUTTONS.forEach(b => {
+  const a = b.a * Math.PI / 180;
+  const rx = C_CX + Math.cos(a) * R_MODE;
+  const ry = C_CY + Math.sin(a) * R_MODE;
+  ledBall(gCircle, b.id, rx, ry, R_BALL_LG, "lg");
+  text(gLabels, rx, ry + R_BALL_LG + 14, b.lbl, { size: 10, "class": "label-strong" });
+});
+text(gLabels, C_CX, C_CY, "MODE", { size: 14, "class": "label-strong" });
+
+/* 9g. TRANSPORT — bottom-right quadrant of the Circle.
+   Reference manual §Transport (Nav Guide pg 13): Play, Stop, Pause, Record,
+   plus step-back / step-forward + repeat arrows shown in the lit photo. */
+const TRANSPORT = [
+  { id: "transport-back",   lbl: "◀",   ang:  10 },
+  { id: "transport-stop",   lbl: "■",   ang:  25 },
+  { id: "transport-rec",    lbl: "●",   ang:  40 },
+  { id: "transport-pause",  lbl: "❚❚",  ang:  55 },
+  { id: "transport-play",   lbl: "▶",   ang:  70 },
+  { id: "transport-fwd",    lbl: "▶▶",  ang:  85 },
+];
+TRANSPORT.forEach(b => {
+  const a = b.ang * Math.PI / 180;
+  const rx = C_CX + Math.cos(a) * (R_OUTER * 0.82);
+  const ry = C_CY + Math.sin(a) * (R_OUTER * 0.82);
+  ledBall(gCircle, b.id, rx, ry, R_BALL_LG, "lg");
+  text(gLabels, rx, ry + R_BALL_LG + 14, b.lbl, { size: 11, "class": "label-strong" });
+});
+text(gLabels, C_CX + R_OUTER * 0.55, C_CY + R_OUTER * 0.78, "TRANSPORT", { size: 12, "class": "label-strong" });
+
+/* ── 10. CHORD column on the far right edge (7 note slots, top-down). ── */
+const gChord = document.getElementById("g-chord");
+for (let i = 0; i < CHORD_COUNT; i++) {
+  ledBall(gChord, `chord-note-${i + 1}`, X_CHORD, CHORD_TOP_Y + i * CHORD_PITCH, R_BALL_MD, "md");
+  text(gLabels, X_CHORD + 28, CHORD_TOP_Y + i * CHORD_PITCH, String(i + 1), { size: 11, anchor: "start" });
+}
+</script>
+</body>
+</html>
