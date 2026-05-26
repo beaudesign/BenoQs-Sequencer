@@ -366,22 +366,27 @@ ledBall(gCircle, "reset-button", C_CX + R_OUTER * 0.55, C_CY - R_OUTER * 0.78 + 
 ledBall(gCircle, "key-200", C_CX, C_CY - R_OUTER * 0.92, R_BALL_LG, "lg");
 text(gLabels, C_CX, C_CY - R_OUTER * 0.92 - 36, "200", { size: 11 });
 
-/* 9c. Tempo numeric display — top-left quadrant of the outer circle.
-   Hardware shows BPM as ~16 LED dots in a 4×4-ish numeric layout.
-   Reference manual §Master Tempo (pg 13). We render the dots as small balls. */
-const tempoCX = C_CX - R_OUTER * 0.62;
-const tempoCY = C_CY - R_OUTER * 0.42;
-const tempoSpan = 120, tempoStep = tempoSpan / 3;
-for (let row = 0; row < 4; row++) {
-  for (let col = 0; col < 4; col++) {
+/* 9c. Tempo numeric display — top-left quadrant of the outer ring.
+   Hardware uses two vertical LED columns: red LEDs count tens, green LEDs
+   point at ones (reference manual §Step velocity pg 15 describes the same
+   tens/ones pattern reused for numeric quadrants). Position well outside the
+   inner ring so it doesn't crowd MOD/SEL/CAD. */
+const tempoCX = C_CX - R_OUTER * 0.78;
+const tempoCY = C_CY - R_OUTER * 0.50;
+const tempoCols = 2;          // tens column, ones column
+const tempoRows = 7;          // 0..6 — enough headroom for BPM digits
+const tempoColGap = 28;
+const tempoRowPitch = 22;
+for (let col = 0; col < tempoCols; col++) {
+  for (let row = 0; row < tempoRows; row++) {
     ledBall(gCircle,
-      `tempo-dot-${row}-${col}`,
-      tempoCX - tempoSpan / 2 + col * tempoStep,
-      tempoCY - tempoSpan / 2 + row * tempoStep,
+      `tempo-${col === 0 ? "tens" : "ones"}-${row}`,
+      tempoCX + (col - 0.5) * tempoColGap,
+      tempoCY - ((tempoRows - 1) / 2 - row) * tempoRowPitch,
       R_BALL_SM * 0.55, "sm");
   }
 }
-text(gLabels, tempoCX, tempoCY + tempoSpan / 2 + 28, "TEMPO", { size: 11 });
+text(gLabels, tempoCX, tempoCY + tempoRows * tempoRowPitch / 2 + 22, "TEMPO", { size: 11, "class": "label-strong" });
 
 /* 9d. SCALE note ring — bottom-left arc, 12 chromatic notes.
    Manual §Composing scales (pg 70): 12-note ring with root highlighted in Orange. */
