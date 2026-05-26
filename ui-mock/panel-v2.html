@@ -170,6 +170,7 @@
   </svg>
 </div>
 
+<script src="adapter.js"></script>
 <script>
 "use strict";
 
@@ -519,6 +520,46 @@ function setLedScope(scope, state) {
 window.setLed = setLed;
 window.setLedScope = setLedScope;
 window.LED_STATES = LED_STATES;
+
+/* ── Adapter wiring ─────────────────────────────────────────────────────
+   ui-mock/adapter.js exposes window.OctopusAdapter.createAdapter().
+   We instantiate once and expose window.octoMessage(name, ...args) so the
+   Max jweb host (or any test harness) can drive the panel using the same
+   call signatures as octopus_jweb_bridge.js. */
+(function adapterGlue() {
+  if (!window.OctopusAdapter) {
+    console.warn("OctopusAdapter not loaded; adapter wiring skipped.");
+    return;
+  }
+  const adapter = window.OctopusAdapter.createAdapter();
+
+  function applyCalls(calls) {
+    if (!calls || !calls.length) return 0;
+    let applied = 0;
+    for (let i = 0; i < calls.length; i++) {
+      if (setLed(calls[i].id, calls[i].state)) applied++;
+    }
+    return applied;
+  }
+
+  const ROUTES = {
+    updateStep:     (ti, si, a, sk, ch) => adapter.updateStep(+ti, +si, !!+a, !!+sk, !!+ch),
+    updatePlayhead: (ti, pos)           => adapter.updatePlayhead(+ti, +pos),
+    setTempo:       (bpm)               => adapter.setTempo(+bpm),
+    setTransport:   (running)           => adapter.setTransport(!!+running),
+    loadPage:       (json)              => adapter.loadPage(json),
+  };
+
+  window.octoMessage = function octoMessage(name /*, ...args */) {
+    const fn = ROUTES[name];
+    if (!fn) { console.warn("octoMessage: unknown route", name); return 0; }
+    const args = Array.prototype.slice.call(arguments, 1);
+    return applyCalls(fn.apply(null, args));
+  };
+
+  // For console testing / future inspection.
+  window.octoAdapter = adapter;
+})();
 
 /* ── Dev panel wiring ── */
 (function devPanel() {
