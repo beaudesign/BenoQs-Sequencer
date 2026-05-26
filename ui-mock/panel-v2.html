@@ -46,9 +46,84 @@
 
   /* Faint outer ring around the Circle area for orientation. */
   .guide-ring { fill: none; stroke: var(--hairline); stroke-width: 1; }
+
+  /* ── LED state vocabulary (per reference manual §Step skip pg 14) ─────────
+     off, green, red, orange — solid lit
+     *_flash — alternating opacity (blink)
+     *_shine — brighter than solid (used for hyperstep marker etc.)
+  ────────────────────────────────────────────────────────────────────────── */
+  .led[data-state="off"]           { fill: url(#led-off); }
+  .led[data-state="green"]         { fill: var(--green); }
+  .led[data-state="red"]           { fill: var(--red); }
+  .led[data-state="orange"]        { fill: var(--orange); }
+  .led[data-state="green_shine"]   { fill: #76f44a; }
+  .led[data-state="red_shine"]     { fill: #ff3838; }
+  .led[data-state="orange_shine"]  { fill: #ff9a2a; }
+  .led[data-state="green_flash"]   { fill: var(--green);  animation: led-flash 600ms steps(2) infinite; }
+  .led[data-state="red_flash"]     { fill: var(--red);    animation: led-flash 600ms steps(2) infinite; }
+  .led[data-state="orange_flash"]  { fill: var(--orange); animation: led-flash 600ms steps(2) infinite; }
+
+  @keyframes led-flash {
+    0%, 49%   { opacity: 1; }
+    50%, 100% { opacity: 0.25; }
+  }
+
+  /* ── Dev panel (collapsible overlay; not part of the hardware) ───────── */
+  #dev-panel {
+    position: fixed; top: 12px; right: 12px;
+    background: rgba(20,16,10,.88); color: #f4f1ea;
+    font: 12px/1.3 var(--font);
+    border-radius: 6px; padding: 8px 10px;
+    z-index: 10; max-width: 240px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.25);
+  }
+  #dev-panel header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin: -2px 0 6px;
+  }
+  #dev-panel header h4 { font-size: 11px; font-weight: 600; letter-spacing: .04em; opacity: .82; }
+  #dev-panel button.toggle { background: transparent; border: 0; color: inherit; cursor: pointer; font-size: 14px; }
+  #dev-panel[data-collapsed="true"] .dev-body { display: none; }
+  #dev-panel .state-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; margin-bottom: 6px; }
+  #dev-panel .state-grid button {
+    font: inherit; color: #f4f1ea; background: rgba(255,255,255,.08);
+    border: 1px solid rgba(255,255,255,.12); border-radius: 4px;
+    padding: 4px 6px; cursor: pointer; text-align: left;
+  }
+  #dev-panel .state-grid button:hover { background: rgba(255,255,255,.16); }
+  #dev-panel select {
+    width: 100%; font: inherit; color: #f4f1ea;
+    background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12);
+    border-radius: 4px; padding: 3px 5px; margin-bottom: 4px;
+  }
+  #dev-panel .hint { opacity: .55; font-size: 10px; line-height: 1.35; }
 </style>
 </head>
 <body>
+<aside id="dev-panel" data-collapsed="false">
+  <header>
+    <h4>LED state QA</h4>
+    <button class="toggle" type="button" aria-label="Collapse">−</button>
+  </header>
+  <div class="dev-body">
+    <select id="dev-scope" aria-label="Scope">
+      <option value="all">all LEDs</option>
+      <option value="matrix">matrix only</option>
+      <option value="sel">SEL column</option>
+      <option value="mut">MUT column</option>
+      <option value="attr">attribute selectors</option>
+      <option value="mixtarget">MIX TARGET row</option>
+      <option value="mode">MODE block</option>
+      <option value="transport">transport</option>
+      <option value="scale">scale ring + inner</option>
+      <option value="chord">CHORD column</option>
+      <option value="tempo">tempo dots</option>
+    </select>
+    <div class="state-grid" id="dev-state-grid"></div>
+    <div class="hint">Or use the console: <code>setLed(id, state)</code>. Ids: matrix-r0..9-c0..15, mix-encoder-N, sel-N, mut-N, mode-{grid|page|track|step|map|play}, scale-note-0..11, etc.</div>
+  </div>
+</aside>
+
 <div class="stage">
   <svg class="panel" viewBox="0 0 2400 1300" xmlns="http://www.w3.org/2000/svg" id="panel-svg" aria-label="BenoQs Panel">
     <defs>
@@ -385,6 +460,85 @@ for (let i = 0; i < CHORD_COUNT; i++) {
   ledBall(gChord, `chord-note-${i + 1}`, X_CHORD, CHORD_TOP_Y + i * CHORD_PITCH, R_BALL_MD, "md");
   text(gLabels, X_CHORD + 28, CHORD_TOP_Y + i * CHORD_PITCH, String(i + 1), { size: 11, anchor: "start" });
 }
+
+/* ── LED state API ──
+   Vocabulary (10): off | green | red | orange | {green|red|orange}_flash |
+                    {green|red|orange}_shine
+   Per reference manual §Step skip (pg 14). Hardware uses the flash variants to
+   denote attention states, shine for hyperstep / chase markers. */
+const LED_STATES = [
+  "off",
+  "green", "red", "orange",
+  "green_flash", "red_flash", "orange_flash",
+  "green_shine", "red_shine", "orange_shine",
+];
+
+function setLed(id, state) {
+  const node = document.getElementById(id);
+  if (!node || !node.classList.contains("led")) return false;
+  if (LED_STATES.indexOf(state) === -1) {
+    console.warn("setLed: unknown state", state);
+    return false;
+  }
+  node.setAttribute("data-state", state);
+  return true;
+}
+
+function setLedScope(scope, state) {
+  const sels = {
+    all:       ".led",
+    matrix:    "[id^='matrix-r']",
+    sel:       "[id^='sel-']",
+    mut:       "[id^='mut-']",
+    attr:      "[id^='attr-']",
+    mixtarget: "[id^='mixtarget-']",
+    mode:      "[id^='mode-']",
+    transport: "[id^='transport-']",
+    scale:     "[id^='scale-']",
+    chord:     "[id^='chord-']",
+    tempo:     "[id^='tempo-']",
+  };
+  const sel = sels[scope] || sels.all;
+  const nodes = document.querySelectorAll(sel + ".led, " + sel);
+  let count = 0;
+  nodes.forEach(n => {
+    if (n.classList && n.classList.contains("led")) {
+      n.setAttribute("data-state", state);
+      count++;
+    }
+  });
+  return count;
+}
+
+// Expose for console / future adapter.
+window.setLed = setLed;
+window.setLedScope = setLedScope;
+window.LED_STATES = LED_STATES;
+
+/* ── Dev panel wiring ── */
+(function devPanel() {
+  const panel = document.getElementById("dev-panel");
+  const grid  = document.getElementById("dev-state-grid");
+  const scope = document.getElementById("dev-scope");
+  const toggle = panel.querySelector("button.toggle");
+
+  LED_STATES.forEach(s => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = s;
+    b.addEventListener("click", () => {
+      const n = setLedScope(scope.value, s);
+      b.title = "applied to " + n + " LEDs";
+    });
+    grid.appendChild(b);
+  });
+
+  toggle.addEventListener("click", () => {
+    const collapsed = panel.getAttribute("data-collapsed") === "true";
+    panel.setAttribute("data-collapsed", collapsed ? "false" : "true");
+    toggle.textContent = collapsed ? "−" : "+";
+  });
+})();
 </script>
 </body>
 </html>
