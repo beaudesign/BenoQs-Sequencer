@@ -121,6 +121,8 @@
     </select>
     <div class="state-grid" id="dev-state-grid"></div>
     <div class="hint">Or use the console: <code>setLed(id, state)</code>. Ids: matrix-r0..9-c0..15, mix-encoder-N, sel-N, mut-N, mode-{grid|page|track|step|map|play}, scale-note-0..11, etc.</div>
+    <h4 style="margin-top:8px;font-size:11px;font-weight:600;letter-spacing:.04em;opacity:.82;">Outgoing (octoEmit)</h4>
+    <pre id="emit-log" style="margin-top:4px;font:11px/1.35 ui-monospace,Menlo,monospace;color:#d6f0c4;background:rgba(255,255,255,.04);padding:6px 8px;border-radius:4px;max-height:140px;overflow:auto;white-space:pre-wrap;"></pre>
   </div>
 </aside>
 
@@ -171,6 +173,7 @@
 </div>
 
 <script src="adapter.js"></script>
+<script src="interactions.js"></script>
 <script>
 "use strict";
 
@@ -559,6 +562,79 @@ window.LED_STATES = LED_STATES;
 
   // For console testing / future inspection.
   window.octoAdapter = adapter;
+})();
+
+/* ── Interaction wiring ──
+   Delegated pointer handlers on the SVG root. Click / shift-click / double-click
+   route through ui-mock/interactions.js's interpretClick(); encoder drags
+   accumulate vertical pixels and emit ticks via interpretEncoderDelta(). All
+   outputs flow through window.octoEmit so Max can replace the default
+   console-logging sink with an outlet send. */
+(function interactionsGlue() {
+  if (!window.OctopusInteractions) {
+    console.warn("OctopusInteractions not loaded; input wiring skipped.");
+    return;
+  }
+  const I = window.OctopusInteractions;
+  const svg = document.getElementById("panel-svg");
+  const recent = [];
+  const RECENT_CAP = 12;
+
+  function defaultEmit(name) {
+    const args = Array.prototype.slice.call(arguments, 1);
+    const entry = name + (args.length ? " " + args.join(" ") : "");
+    recent.unshift(entry);
+    if (recent.length > RECENT_CAP) recent.pop();
+    const log = document.getElementById("emit-log");
+    if (log) log.textContent = recent.join("\n");
+    console.log("octoEmit:", entry);
+  }
+  if (typeof window.octoEmit !== "function") window.octoEmit = defaultEmit;
+
+  // Walk up from a hit target to the nearest ancestor with an id we recognise.
+  function findInteractive(target) {
+    let n = target;
+    while (n && n !== svg) {
+      if (n.id) return n;
+      n = n.parentNode;
+    }
+    return null;
+  }
+
+  svg.addEventListener("click", function (ev) {
+    const node = findInteractive(ev.target);
+    if (!node) return;
+    const msg = I.interpretClick(node.id, { shift: ev.shiftKey, alt: ev.altKey, meta: ev.metaKey }, false);
+    if (msg) window.octoEmit.apply(null, [msg.name].concat(msg.args));
+  });
+
+  svg.addEventListener("dblclick", function (ev) {
+    const node = findInteractive(ev.target);
+    if (!node) return;
+    const msg = I.interpretClick(node.id, { shift: ev.shiftKey }, true);
+    if (msg) window.octoEmit.apply(null, [msg.name].concat(msg.args));
+  });
+
+  // Encoder drag — pointer events.
+  let drag = null;
+  svg.addEventListener("pointerdown", function (ev) {
+    const node = findInteractive(ev.target);
+    if (!node || !/encoder/.test(node.id)) return;
+    drag = { id: node.id, lastY: ev.clientY, accumulatedPx: 0 };
+    try { ev.target.setPointerCapture && ev.target.setPointerCapture(ev.pointerId); } catch (e) {}
+  });
+  window.addEventListener("pointermove", function (ev) {
+    if (!drag) return;
+    drag.accumulatedPx += (drag.lastY - ev.clientY); // up = positive
+    drag.lastY = ev.clientY;
+    const msg = I.interpretEncoderDelta(drag.id, drag.accumulatedPx);
+    if (msg) {
+      window.octoEmit.apply(null, [msg.name].concat(msg.args));
+      drag.accumulatedPx = msg.remainderPx;
+    }
+  });
+  window.addEventListener("pointerup", function () { drag = null; });
+  window.addEventListener("pointercancel", function () { drag = null; });
 })();
 
 /* ── Dev panel wiring ── */

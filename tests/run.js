@@ -6,6 +6,7 @@ var shim = require("./max_shim");
 var schedulerTests = require("./scheduler.test");
 var presetsTests = require("./presets.test");
 var uiAdapterTests = require("./ui_adapter.test");
+var interactionsTests = require("./interactions.test");
 
 var ctx = shim.createMaxContext();
 ctx.include("octopus_scheduler.js"); // pulls in octopus_scale.js via its own include()
@@ -63,6 +64,9 @@ presetsTests.run(ctx, makeTester("presets"));
 
 process.stdout.write("\nui_adapter.test.js\n");
 uiAdapterTests.run(ctx, makeTester("ui_adapter"));
+
+process.stdout.write("\ninteractions.test.js\n");
+interactionsTests.run(ctx, makeTester("interactions"));
 
 process.stdout.write("\n" + pass + " passed, " + fail + " failed\n");
 process.exit(fail === 0 ? 0 : 1);
