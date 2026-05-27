@@ -129,23 +129,34 @@
 <div class="stage">
   <svg class="panel" viewBox="0 0 2400 1300" xmlns="http://www.w3.org/2000/svg" id="panel-svg" aria-label="BenoQs Panel">
     <defs>
-      <!-- Chrome encoder gradient: highlight top-left, shadow bottom-right. -->
-      <radialGradient id="chrome" cx="35%" cy="30%" r="70%">
-        <stop offset="0%"   stop-color="#f4f1ea"/>
-        <stop offset="40%"  stop-color="#cfcbc2"/>
-        <stop offset="80%"  stop-color="#a8a49b"/>
-        <stop offset="100%" stop-color="#878379"/>
+      <!-- Chrome encoder: bright specular highlight upper-left, gradient
+           through middle tones, deep shadow lower-right. -->
+      <radialGradient id="chrome" cx="32%" cy="24%" r="80%">
+        <stop offset="0%"   stop-color="#ffffff"/>
+        <stop offset="12%"  stop-color="#f4f0e7"/>
+        <stop offset="45%"  stop-color="#c0bcb3"/>
+        <stop offset="78%"  stop-color="#7a7669"/>
+        <stop offset="100%" stop-color="#3e3b34"/>
       </radialGradient>
-      <radialGradient id="chrome-sm" cx="35%" cy="30%" r="70%">
-        <stop offset="0%"   stop-color="#ede9e0"/>
-        <stop offset="55%"  stop-color="#c4c0b7"/>
-        <stop offset="100%" stop-color="#928e85"/>
+      <!-- Secondary specular for the chrome cap (smaller, sharper highlight). -->
+      <radialGradient id="chrome-cap" cx="40%" cy="30%" r="60%">
+        <stop offset="0%"   stop-color="rgba(255,255,255,.95)"/>
+        <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
       </radialGradient>
       <radialGradient id="led-off" cx="40%" cy="35%" r="65%">
         <stop offset="0%"   stop-color="#e0dcd2"/>
         <stop offset="60%"  stop-color="#bcb8af"/>
         <stop offset="100%" stop-color="#969286"/>
       </radialGradient>
+      <!-- Soft ground shadow under encoders (drop-shadow filter is supported
+           by Chromium / Safari / Firefox in current versions). -->
+      <filter id="dropshadow" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur in="SourceAlpha" stdDeviation="1.2"/>
+        <feOffset dx="0" dy="1.5" result="off"/>
+        <feComponentTransfer><feFuncA type="linear" slope="0.35"/></feComponentTransfer>
+        <feComposite in2="off" operator="in"/>
+        <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
     </defs>
 
     <!-- Panel face (cream) -->
@@ -276,12 +287,17 @@ function transportGlyph(parent, type, cx, cy, size) {
 }
 
 function encoder(parent, id, cx, cy, r) {
-  // Outer shaft + inner cap; simple two-circle representation
-  const g = el("g", { id, class: "encoder-group" }, parent);
+  // Layered chrome rendering:
+  //   1. Outer shaft (radial gradient — bright top-left → dark bottom-right)
+  //   2. Edge ring (subtle dark outline grounds the dome)
+  //   3. Specular cap (sharper highlight)
+  //   4. Indicator notch — at 12 o'clock (neutral). In a future pass this can
+  //      rotate to reflect encoder value.
+  const g = el("g", { id, class: "encoder-group", filter: "url(#dropshadow)" }, parent);
   el("circle", { cx, cy, r, class: "encoder", fill: "url(#chrome)" }, g);
-  el("circle", { cx: cx - r * 0.18, cy: cy - r * 0.18, r: r * 0.42, fill: "rgba(255,255,255,.18)" }, g);
-  // indicator notch (top-left default)
-  el("circle", { cx: cx - r * 0.55, cy: cy - r * 0.55, r: r * 0.10, fill: "rgba(20,16,10,.55)" }, g);
+  el("circle", { cx, cy, r: r - 0.5, fill: "none", stroke: "rgba(20,16,10,.45)", "stroke-width": 0.6 }, g);
+  el("circle", { cx: cx - r * 0.18, cy: cy - r * 0.22, r: r * 0.52, fill: "url(#chrome-cap)" }, g);
+  el("circle", { cx: cx, cy: cy - r * 0.72, r: r * 0.11, fill: "rgba(20,16,10,.72)" }, g);
   return g;
 }
 
@@ -364,6 +380,12 @@ const MIX_TARGET_LABELS = [
   "1","2","3","4","5","CHN","FLT","RMX",
 ];
 const gBottom = document.getElementById("g-bottom");
+// Section label engraved above the strip (centre of matrix width).
+text(gLabels,
+  (colX(0) + colX(COL_COUNT - 1)) / 2,
+  Y_MIX_TARGET - R_BALL_MD - 22,
+  "MIX TARGET",
+  { size: 13, "class": "label-strong" });
 for (let c = 0; c < COL_COUNT; c++) {
   ledBall(gBottom, `mixtarget-${c}`, colX(c), Y_MIX_TARGET, R_BALL_MD, "md");
   text(gLabels, colX(c), Y_MIX_TARGET + 36, MIX_TARGET_LABELS[c], { size: 10 });
