@@ -32,8 +32,14 @@
   .label-strong { fill: var(--engraved-strong); }
   .label-italic { font-style: italic; }
 
-  /* Default LED appearance — small ball, idle. */
-  .led { stroke: rgba(20,16,10,.18); stroke-width: 0.8; }
+  /* Flush LED appearance — slight rim, no heavy 3D shading. */
+  .led { stroke: rgba(20,16,10,.22); stroke-width: 0.6; }
+  .led[data-state="green"],
+  .led[data-state="red"],
+  .led[data-state="orange"],
+  .led[data-state="green_shine"],
+  .led[data-state="red_shine"],
+  .led[data-state="orange_shine"] { stroke: rgba(20,16,10,.10); }
   .led-sm { /* matrix / sel / mut / attribute selector */ }
   .led-md { /* mix target strip, chord notes, scale ring */ }
   .led-lg { /* mode block etc. */ }
@@ -143,10 +149,16 @@
         <stop offset="0%"   stop-color="rgba(255,255,255,.95)"/>
         <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
       </radialGradient>
-      <radialGradient id="led-off" cx="40%" cy="35%" r="65%">
-        <stop offset="0%"   stop-color="#e0dcd2"/>
-        <stop offset="60%"  stop-color="#bcb8af"/>
-        <stop offset="100%" stop-color="#969286"/>
+      <!-- Idle LED: flush PCB-mount appearance, low-contrast dome. -->
+      <radialGradient id="led-off" cx="45%" cy="40%" r="60%">
+        <stop offset="0%"   stop-color="#d6d2c8"/>
+        <stop offset="70%"  stop-color="#c2bdb3"/>
+        <stop offset="100%" stop-color="#b0aca2"/>
+      </radialGradient>
+      <!-- Bright halo for lit states (used by green/red/orange shines). -->
+      <radialGradient id="led-halo" cx="50%" cy="50%" r="60%">
+        <stop offset="0%"   stop-color="rgba(255,255,255,.55)"/>
+        <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
       </radialGradient>
       <!-- Soft ground shadow under encoders (drop-shadow filter is supported
            by Chromium / Safari / Firefox in current versions). -->
@@ -159,8 +171,13 @@
       </filter>
     </defs>
 
-    <!-- Panel face (cream) -->
+    <!-- Panel face (cream) + faint inner hairline frame to suggest the
+         engraved metal-on-wood boundary of the hardware. -->
     <rect x="0" y="0" width="2400" height="1300" fill="var(--bg-panel)"/>
+    <rect x="18" y="18" width="2364" height="1264" fill="none"
+          stroke="rgba(20,16,10,.10)" stroke-width="1"/>
+    <rect x="26" y="26" width="2348" height="1248" fill="none"
+          stroke="rgba(20,16,10,.06)" stroke-width="0.5"/>
 
     <!-- Wordmarks (top corners) -->
     <text x="60"   y="60" class="label" font-size="22">genoQs Machines</text>
