@@ -253,6 +253,28 @@ function ledBall(parent, id, cx, cy, r, kind) {
   }, parent);
 }
 
+// Transport glyphs rendered as proper SVG paths instead of Unicode symbols.
+function transportGlyph(parent, type, cx, cy, size) {
+  const s = size || 8;
+  const g = el("g", { transform: `translate(${cx} ${cy})`, fill: "rgba(20,16,10,.62)", stroke: "none" }, parent);
+  if (type === "play") {
+    el("path", { d: `M -${s*0.6},-${s} L ${s*0.9},0 L -${s*0.6},${s} Z` }, g);
+  } else if (type === "stop") {
+    el("rect", { x: -s*0.8, y: -s*0.8, width: s*1.6, height: s*1.6 }, g);
+  } else if (type === "pause") {
+    el("rect", { x: -s*0.7, y: -s, width: s*0.5, height: s*2 }, g);
+    el("rect", { x:  s*0.2, y: -s, width: s*0.5, height: s*2 }, g);
+  } else if (type === "rec") {
+    el("circle", { cx: 0, cy: 0, r: s*0.85, fill: "var(--red)" }, g);
+  } else if (type === "back") {
+    el("path", { d: `M ${s*0.6},-${s} L -${s*0.9},0 L ${s*0.6},${s} Z` }, g);
+  } else if (type === "fwd") {
+    el("path", { d: `M -${s*0.9},-${s*0.8} L ${s*0.1},0 L -${s*0.9},${s*0.8} Z` }, g);
+    el("path", { d: `M ${s*0.1},-${s*0.8} L ${s*1.1},0 L ${s*0.1},${s*0.8} Z` }, g);
+  }
+  return g;
+}
+
 function encoder(parent, id, cx, cy, r) {
   // Outer shaft + inner cap; simple two-circle representation
   const g = el("g", { id, class: "encoder-group" }, parent);
@@ -395,11 +417,13 @@ text(gLabels, tempoCX, tempoCY + tempoRows * tempoRowPitch / 2 + 22, "TEMPO", { 
 /* 9d. SCALE note ring — bottom-left arc, 12 chromatic notes.
    Manual §Composing scales (pg 70): 12-note ring with root highlighted in Orange. */
 const SCALE_NOTES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
-// Scale ring takes the left half of the Circle (matches hardware photo:
-// 12 notes wrapping from near-bottom up through the left to near-top).
-// Transport occupies the lower-right quadrant so we avoid that range here.
-const SCALE_START_DEG = 100;   // just past bottom, going clockwise
-const SCALE_SWEEP_DEG = 160;   // ends near top-left (~260°)
+// Scale ring wraps the bottom-left of the Circle, sweeping from the lower
+// transport boundary (~100°) counter-clockwise through the bottom-left into
+// the upper-left (~280°). Wider sweep than first pass — matches the open
+// spiral of the hardware photo. Transport occupies the lower-right quadrant
+// so we start just past it.
+const SCALE_START_DEG = 100;
+const SCALE_SWEEP_DEG = 200;   // ends near 300° (upper-left)
 for (let i = 0; i < 12; i++) {
   const a = (SCALE_START_DEG + (i / 11) * SCALE_SWEEP_DEG) * Math.PI / 180;
   const rx = C_CX + Math.cos(a) * (R_OUTER * 0.82);
@@ -424,42 +448,46 @@ SCALE_INNER.forEach(b => {
 });
 text(gLabels, C_CX - R_OUTER * 0.18, C_CY + R_OUTER * 0.78, "SCALE", { size: 14, "class": "label-strong" });
 
-/* 9f. MODE block — inner ring with GRID / PAGE / TRACK / STEP / MAP / PLAY.
-   Manual §The MODE block (Nav Guide pg 24). Center-of-circle layout. */
+/* 9f. MODE block — PAGE prominent at the inner-ring centre, GRID/TRACK/STEP/
+   MAP/PLAY arranged around it. Hardware (Navigation Guide pg 24) makes the
+   PAGE indicator the orientation landmark; we render it larger to match. */
+const MODE_ORBIT_R = 88;
 const MODE_BUTTONS = [
-  { id: "mode-grid",  lbl: "GRID",  a: -90  },
-  { id: "mode-page",  lbl: "PAGE",  a: -30  },
-  { id: "mode-track", lbl: "TRACK", a:  30  },
-  { id: "mode-step",  lbl: "STEP",  a:  90  },
-  { id: "mode-map",   lbl: "MAP",   a: 150  },
-  { id: "mode-play",  lbl: "PLAY",  a: 210  },
+  { id: "mode-grid",  lbl: "GRID",  ang: -90 }, // N
+  { id: "mode-track", lbl: "TRACK", ang:   0 }, // E
+  { id: "mode-step",  lbl: "STEP",  ang:  90 }, // S
+  { id: "mode-map",   lbl: "MAP",   ang: 180 }, // W
+  { id: "mode-play",  lbl: "PLAY",  ang:  45 }, // SE diagonal
 ];
 MODE_BUTTONS.forEach(b => {
-  const a = b.a * Math.PI / 180;
-  const rx = C_CX + Math.cos(a) * R_MODE;
-  const ry = C_CY + Math.sin(a) * R_MODE;
+  const a = b.ang * Math.PI / 180;
+  const rx = C_CX + Math.cos(a) * MODE_ORBIT_R;
+  const ry = C_CY + Math.sin(a) * MODE_ORBIT_R;
   ledBall(gCircle, b.id, rx, ry, R_BALL_LG, "lg");
   text(gLabels, rx, ry + R_BALL_LG + 14, b.lbl, { size: 10, "class": "label-strong" });
 });
-text(gLabels, C_CX, C_CY, "MODE", { size: 14, "class": "label-strong" });
+// PAGE at centre, larger to match the hardware's emphasis.
+ledBall(gCircle, "mode-page", C_CX, C_CY, R_BALL_LG * 1.35, "lg");
+text(gLabels, C_CX, C_CY + R_BALL_LG * 1.35 + 14, "PAGE", { size: 11, "class": "label-strong" });
 
 /* 9g. TRANSPORT — bottom-right quadrant of the Circle.
    Reference manual §Transport (Nav Guide pg 13): Play, Stop, Pause, Record,
-   plus step-back / step-forward + repeat arrows shown in the lit photo. */
+   step-back / step-forward arrows. Glyphs rendered as SVG paths instead of
+   Unicode so they kern and scale consistently across hosts. */
 const TRANSPORT = [
-  { id: "transport-back",   lbl: "◀",   ang:  10 },
-  { id: "transport-stop",   lbl: "■",   ang:  25 },
-  { id: "transport-rec",    lbl: "●",   ang:  40 },
-  { id: "transport-pause",  lbl: "❚❚",  ang:  55 },
-  { id: "transport-play",   lbl: "▶",   ang:  70 },
-  { id: "transport-fwd",    lbl: "▶▶",  ang:  85 },
+  { id: "transport-back",  glyph: "back",  ang: 10 },
+  { id: "transport-stop",  glyph: "stop",  ang: 25 },
+  { id: "transport-rec",   glyph: "rec",   ang: 40 },
+  { id: "transport-pause", glyph: "pause", ang: 55 },
+  { id: "transport-play",  glyph: "play",  ang: 70 },
+  { id: "transport-fwd",   glyph: "fwd",   ang: 85 },
 ];
 TRANSPORT.forEach(b => {
   const a = b.ang * Math.PI / 180;
   const rx = C_CX + Math.cos(a) * (R_OUTER * 0.82);
   const ry = C_CY + Math.sin(a) * (R_OUTER * 0.82);
   ledBall(gCircle, b.id, rx, ry, R_BALL_LG, "lg");
-  text(gLabels, rx, ry + R_BALL_LG + 14, b.lbl, { size: 11, "class": "label-strong" });
+  transportGlyph(gLabels, b.glyph, rx, ry + R_BALL_LG + 16, 7);
 });
 text(gLabels, C_CX + R_OUTER * 0.55, C_CY + R_OUTER * 0.78, "TRANSPORT", { size: 12, "class": "label-strong" });
 
