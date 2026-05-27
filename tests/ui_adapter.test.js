@@ -118,11 +118,12 @@ function run(_sandbox, t) {
       page.tracks.push({ steps: steps });
     }
     var calls = a.loadPage(JSON.stringify(page));
-    // 10×16 + the mode-page indicator = 161 calls
-    t.eq(calls.length, 161, "all cells plus mode-page");
+    // 10×16 cells + 6 mode LEDs = 166 calls
+    t.eq(calls.length, 166, "all cells plus full mode-LED set");
     t.eq(findCall(calls, "matrix-r0-c0").state, "green", "only active cell green");
     t.eq(findCall(calls, "matrix-r0-c1").state, "off", "rest off");
     t.eq(findCall(calls, "mode-page").state, "orange_flash", "PAGE indicator flashing");
+    t.eq(findCall(calls, "mode-grid").state, "off", "non-active modes off");
   });
 
   t("loadPage with malformed JSON returns empty (no throw)", function () {
@@ -147,6 +148,90 @@ function run(_sandbox, t) {
     var a = Adapter.createAdapter();
     t.eq(a.updateStep(99, 0, true, false, false).length, 0);
     t.eq(a.updateStep(0, 99, true, false, false).length, 0);
+  });
+
+  // ── U5: mode dispatch ───────────────────────────────────────────────────
+  function countByState(calls, idPrefix, state) {
+    return calls.filter(function (c) {
+      return c.id.indexOf(idPrefix) === 0 && c.state === state;
+    }).length;
+  }
+
+  t("setMode('grid') lights only the active page cell", function () {
+    var a = Adapter.createAdapter();
+    var calls = a.setMode("grid", { bank: 2, page: 5 });
+    t.eq(findCall(calls, "matrix-r2-c5").state, "green", "active page lit");
+    t.eq(findCall(calls, "matrix-r0-c0").state, "off", "other cells off");
+    t.eq(findCall(calls, "mode-grid").state, "orange_flash", "GRID mode LED");
+    t.eq(findCall(calls, "mode-page").state, "off", "other modes off");
+  });
+
+  t("setMode('step') dims matrix and flashes selected cell", function () {
+    var a = Adapter.createAdapter();
+    var calls = a.setMode("step", { track: 4, step: 11 });
+    t.eq(findCall(calls, "matrix-r4-c11").state, "orange_flash", "selected cell");
+    t.eq(countByState(calls, "matrix-", "off"), 159, "159 cells dimmed");
+    t.eq(findCall(calls, "mode-step").state, "orange_flash");
+  });
+
+  t("setMode('track') paints row 0 with toggles + lower rows as bars", function () {
+    var a = Adapter.createAdapter();
+    // Build a page with track 3 having a known step pattern + vel offsets.
+    var page = { bank: 0, page: 0, tracks: [] };
+    for (var ti = 0; ti < 10; ti++) {
+      var steps = [];
+      for (var si = 0; si < 16; si++) {
+        steps.push({
+          active: (ti === 3 && si % 4 === 0),
+          skip: false,
+          chords: [],
+          vel_offset: ti === 3 && si === 0 ? 127 : (ti === 3 && si === 4 ? 0 : -127),
+        });
+      }
+      page.tracks.push({ steps: steps });
+    }
+    a.loadPage(JSON.stringify(page));
+    var calls = a.setMode("track", { track: 3, mixTarget: "vel" });
+
+    // Top row should reflect step toggles for track 3.
+    t.eq(findCall(calls, "matrix-r9-c0").state, "green",  "step 0 active");
+    t.eq(findCall(calls, "matrix-r9-c1").state, "off",    "step 1 inactive");
+    t.eq(findCall(calls, "matrix-r9-c4").state, "green",  "step 4 active");
+
+    // Bars: vel_offset 127 → all 9 lit; 0 → ~4-5 lit (centered); -127 → 0 lit.
+    var litStep0 = countByState(calls.filter(function (c) {
+      return /^matrix-r[0-8]-c0$/.test(c.id);
+    }), "matrix-", "green");
+    t.eq(litStep0, 9, "+127 fills the bar");
+
+    var litStep1 = countByState(calls.filter(function (c) {
+      return /^matrix-r[0-8]-c1$/.test(c.id);
+    }), "matrix-", "green");
+    t.eq(litStep1, 0, "-127 leaves the bar empty");
+  });
+
+  t("setSelection in page mode is a no-op repaint (no errors)", function () {
+    var a = Adapter.createAdapter();
+    var page = { tracks: [] };
+    for (var i = 0; i < 10; i++) page.tracks.push({ steps: [] });
+    a.loadPage(JSON.stringify(page));
+    var calls = a.setSelection({ track: 7 });
+    t.eq(calls.length, 160, "page repaint after selection change");
+  });
+
+  t("playhead overlay survives a setMode round-trip back to page", function () {
+    var a = Adapter.createAdapter();
+    var page = { tracks: [] };
+    for (var ti = 0; ti < 10; ti++) {
+      var steps = [];
+      for (var si = 0; si < 16; si++) steps.push({ active: true });
+      page.tracks.push({ steps: steps });
+    }
+    a.loadPage(JSON.stringify(page));
+    a.updatePlayhead(2, 7);
+    a.setMode("grid");
+    var calls = a.setMode("page");
+    t.eq(findCall(calls, "matrix-r2-c7").state, "green_shine", "playhead restored after returning to page mode");
   });
 }
 

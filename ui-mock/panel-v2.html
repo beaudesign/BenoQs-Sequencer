@@ -32,8 +32,14 @@
   .label-strong { fill: var(--engraved-strong); }
   .label-italic { font-style: italic; }
 
-  /* Default LED appearance — small ball, idle. */
-  .led { stroke: rgba(20,16,10,.18); stroke-width: 0.8; }
+  /* Flush LED appearance — slight rim, no heavy 3D shading. */
+  .led { stroke: rgba(20,16,10,.22); stroke-width: 0.6; }
+  .led[data-state="green"],
+  .led[data-state="red"],
+  .led[data-state="orange"],
+  .led[data-state="green_shine"],
+  .led[data-state="red_shine"],
+  .led[data-state="orange_shine"] { stroke: rgba(20,16,10,.10); }
   .led-sm { /* matrix / sel / mut / attribute selector */ }
   .led-md { /* mix target strip, chord notes, scale ring */ }
   .led-lg { /* mode block etc. */ }
@@ -121,33 +127,57 @@
     </select>
     <div class="state-grid" id="dev-state-grid"></div>
     <div class="hint">Or use the console: <code>setLed(id, state)</code>. Ids: matrix-r0..9-c0..15, mix-encoder-N, sel-N, mut-N, mode-{grid|page|track|step|map|play}, scale-note-0..11, etc.</div>
+    <h4 style="margin-top:8px;font-size:11px;font-weight:600;letter-spacing:.04em;opacity:.82;">Outgoing (octoEmit)</h4>
+    <pre id="emit-log" style="margin-top:4px;font:11px/1.35 ui-monospace,Menlo,monospace;color:#d6f0c4;background:rgba(255,255,255,.04);padding:6px 8px;border-radius:4px;max-height:140px;overflow:auto;white-space:pre-wrap;"></pre>
   </div>
 </aside>
 
 <div class="stage">
   <svg class="panel" viewBox="0 0 2400 1300" xmlns="http://www.w3.org/2000/svg" id="panel-svg" aria-label="BenoQs Panel">
     <defs>
-      <!-- Chrome encoder gradient: highlight top-left, shadow bottom-right. -->
-      <radialGradient id="chrome" cx="35%" cy="30%" r="70%">
-        <stop offset="0%"   stop-color="#f4f1ea"/>
-        <stop offset="40%"  stop-color="#cfcbc2"/>
-        <stop offset="80%"  stop-color="#a8a49b"/>
-        <stop offset="100%" stop-color="#878379"/>
+      <!-- Chrome encoder: bright specular highlight upper-left, gradient
+           through middle tones, deep shadow lower-right. -->
+      <radialGradient id="chrome" cx="32%" cy="24%" r="80%">
+        <stop offset="0%"   stop-color="#ffffff"/>
+        <stop offset="12%"  stop-color="#f4f0e7"/>
+        <stop offset="45%"  stop-color="#c0bcb3"/>
+        <stop offset="78%"  stop-color="#7a7669"/>
+        <stop offset="100%" stop-color="#3e3b34"/>
       </radialGradient>
-      <radialGradient id="chrome-sm" cx="35%" cy="30%" r="70%">
-        <stop offset="0%"   stop-color="#ede9e0"/>
-        <stop offset="55%"  stop-color="#c4c0b7"/>
-        <stop offset="100%" stop-color="#928e85"/>
+      <!-- Secondary specular for the chrome cap (smaller, sharper highlight). -->
+      <radialGradient id="chrome-cap" cx="40%" cy="30%" r="60%">
+        <stop offset="0%"   stop-color="rgba(255,255,255,.95)"/>
+        <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
       </radialGradient>
-      <radialGradient id="led-off" cx="40%" cy="35%" r="65%">
-        <stop offset="0%"   stop-color="#e0dcd2"/>
-        <stop offset="60%"  stop-color="#bcb8af"/>
-        <stop offset="100%" stop-color="#969286"/>
+      <!-- Idle LED: flush PCB-mount appearance, low-contrast dome. -->
+      <radialGradient id="led-off" cx="45%" cy="40%" r="60%">
+        <stop offset="0%"   stop-color="#d6d2c8"/>
+        <stop offset="70%"  stop-color="#c2bdb3"/>
+        <stop offset="100%" stop-color="#b0aca2"/>
       </radialGradient>
+      <!-- Bright halo for lit states (used by green/red/orange shines). -->
+      <radialGradient id="led-halo" cx="50%" cy="50%" r="60%">
+        <stop offset="0%"   stop-color="rgba(255,255,255,.55)"/>
+        <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+      </radialGradient>
+      <!-- Soft ground shadow under encoders (drop-shadow filter is supported
+           by Chromium / Safari / Firefox in current versions). -->
+      <filter id="dropshadow" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur in="SourceAlpha" stdDeviation="1.2"/>
+        <feOffset dx="0" dy="1.5" result="off"/>
+        <feComponentTransfer><feFuncA type="linear" slope="0.35"/></feComponentTransfer>
+        <feComposite in2="off" operator="in"/>
+        <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
     </defs>
 
-    <!-- Panel face (cream) -->
+    <!-- Panel face (cream) + faint inner hairline frame to suggest the
+         engraved metal-on-wood boundary of the hardware. -->
     <rect x="0" y="0" width="2400" height="1300" fill="var(--bg-panel)"/>
+    <rect x="18" y="18" width="2364" height="1264" fill="none"
+          stroke="rgba(20,16,10,.10)" stroke-width="1"/>
+    <rect x="26" y="26" width="2348" height="1248" fill="none"
+          stroke="rgba(20,16,10,.06)" stroke-width="0.5"/>
 
     <!-- Wordmarks (top corners) -->
     <text x="60"   y="60" class="label" font-size="22">genoQs Machines</text>
@@ -171,6 +201,7 @@
 </div>
 
 <script src="adapter.js"></script>
+<script src="interactions.js"></script>
 <script>
 "use strict";
 
@@ -250,13 +281,40 @@ function ledBall(parent, id, cx, cy, r, kind) {
   }, parent);
 }
 
+// Transport glyphs rendered as proper SVG paths instead of Unicode symbols.
+function transportGlyph(parent, type, cx, cy, size) {
+  const s = size || 8;
+  const g = el("g", { transform: `translate(${cx} ${cy})`, fill: "rgba(20,16,10,.62)", stroke: "none" }, parent);
+  if (type === "play") {
+    el("path", { d: `M -${s*0.6},-${s} L ${s*0.9},0 L -${s*0.6},${s} Z` }, g);
+  } else if (type === "stop") {
+    el("rect", { x: -s*0.8, y: -s*0.8, width: s*1.6, height: s*1.6 }, g);
+  } else if (type === "pause") {
+    el("rect", { x: -s*0.7, y: -s, width: s*0.5, height: s*2 }, g);
+    el("rect", { x:  s*0.2, y: -s, width: s*0.5, height: s*2 }, g);
+  } else if (type === "rec") {
+    el("circle", { cx: 0, cy: 0, r: s*0.85, fill: "var(--red)" }, g);
+  } else if (type === "back") {
+    el("path", { d: `M ${s*0.6},-${s} L -${s*0.9},0 L ${s*0.6},${s} Z` }, g);
+  } else if (type === "fwd") {
+    el("path", { d: `M -${s*0.9},-${s*0.8} L ${s*0.1},0 L -${s*0.9},${s*0.8} Z` }, g);
+    el("path", { d: `M ${s*0.1},-${s*0.8} L ${s*1.1},0 L ${s*0.1},${s*0.8} Z` }, g);
+  }
+  return g;
+}
+
 function encoder(parent, id, cx, cy, r) {
-  // Outer shaft + inner cap; simple two-circle representation
-  const g = el("g", { id, class: "encoder-group" }, parent);
+  // Layered chrome rendering:
+  //   1. Outer shaft (radial gradient — bright top-left → dark bottom-right)
+  //   2. Edge ring (subtle dark outline grounds the dome)
+  //   3. Specular cap (sharper highlight)
+  //   4. Indicator notch — at 12 o'clock (neutral). In a future pass this can
+  //      rotate to reflect encoder value.
+  const g = el("g", { id, class: "encoder-group", filter: "url(#dropshadow)" }, parent);
   el("circle", { cx, cy, r, class: "encoder", fill: "url(#chrome)" }, g);
-  el("circle", { cx: cx - r * 0.18, cy: cy - r * 0.18, r: r * 0.42, fill: "rgba(255,255,255,.18)" }, g);
-  // indicator notch (top-left default)
-  el("circle", { cx: cx - r * 0.55, cy: cy - r * 0.55, r: r * 0.10, fill: "rgba(20,16,10,.55)" }, g);
+  el("circle", { cx, cy, r: r - 0.5, fill: "none", stroke: "rgba(20,16,10,.45)", "stroke-width": 0.6 }, g);
+  el("circle", { cx: cx - r * 0.18, cy: cy - r * 0.22, r: r * 0.52, fill: "url(#chrome-cap)" }, g);
+  el("circle", { cx: cx, cy: cy - r * 0.72, r: r * 0.11, fill: "rgba(20,16,10,.72)" }, g);
   return g;
 }
 
@@ -339,6 +397,12 @@ const MIX_TARGET_LABELS = [
   "1","2","3","4","5","CHN","FLT","RMX",
 ];
 const gBottom = document.getElementById("g-bottom");
+// Section label engraved above the strip (centre of matrix width).
+text(gLabels,
+  (colX(0) + colX(COL_COUNT - 1)) / 2,
+  Y_MIX_TARGET - R_BALL_MD - 22,
+  "MIX TARGET",
+  { size: 13, "class": "label-strong" });
 for (let c = 0; c < COL_COUNT; c++) {
   ledBall(gBottom, `mixtarget-${c}`, colX(c), Y_MIX_TARGET, R_BALL_MD, "md");
   text(gLabels, colX(c), Y_MIX_TARGET + 36, MIX_TARGET_LABELS[c], { size: 10 });
@@ -392,11 +456,13 @@ text(gLabels, tempoCX, tempoCY + tempoRows * tempoRowPitch / 2 + 22, "TEMPO", { 
 /* 9d. SCALE note ring — bottom-left arc, 12 chromatic notes.
    Manual §Composing scales (pg 70): 12-note ring with root highlighted in Orange. */
 const SCALE_NOTES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
-// Scale ring takes the left half of the Circle (matches hardware photo:
-// 12 notes wrapping from near-bottom up through the left to near-top).
-// Transport occupies the lower-right quadrant so we avoid that range here.
-const SCALE_START_DEG = 100;   // just past bottom, going clockwise
-const SCALE_SWEEP_DEG = 160;   // ends near top-left (~260°)
+// Scale ring wraps the bottom-left of the Circle, sweeping from the lower
+// transport boundary (~100°) counter-clockwise through the bottom-left into
+// the upper-left (~280°). Wider sweep than first pass — matches the open
+// spiral of the hardware photo. Transport occupies the lower-right quadrant
+// so we start just past it.
+const SCALE_START_DEG = 100;
+const SCALE_SWEEP_DEG = 200;   // ends near 300° (upper-left)
 for (let i = 0; i < 12; i++) {
   const a = (SCALE_START_DEG + (i / 11) * SCALE_SWEEP_DEG) * Math.PI / 180;
   const rx = C_CX + Math.cos(a) * (R_OUTER * 0.82);
@@ -421,42 +487,46 @@ SCALE_INNER.forEach(b => {
 });
 text(gLabels, C_CX - R_OUTER * 0.18, C_CY + R_OUTER * 0.78, "SCALE", { size: 14, "class": "label-strong" });
 
-/* 9f. MODE block — inner ring with GRID / PAGE / TRACK / STEP / MAP / PLAY.
-   Manual §The MODE block (Nav Guide pg 24). Center-of-circle layout. */
+/* 9f. MODE block — PAGE prominent at the inner-ring centre, GRID/TRACK/STEP/
+   MAP/PLAY arranged around it. Hardware (Navigation Guide pg 24) makes the
+   PAGE indicator the orientation landmark; we render it larger to match. */
+const MODE_ORBIT_R = 88;
 const MODE_BUTTONS = [
-  { id: "mode-grid",  lbl: "GRID",  a: -90  },
-  { id: "mode-page",  lbl: "PAGE",  a: -30  },
-  { id: "mode-track", lbl: "TRACK", a:  30  },
-  { id: "mode-step",  lbl: "STEP",  a:  90  },
-  { id: "mode-map",   lbl: "MAP",   a: 150  },
-  { id: "mode-play",  lbl: "PLAY",  a: 210  },
+  { id: "mode-grid",  lbl: "GRID",  ang: -90 }, // N
+  { id: "mode-track", lbl: "TRACK", ang:   0 }, // E
+  { id: "mode-step",  lbl: "STEP",  ang:  90 }, // S
+  { id: "mode-map",   lbl: "MAP",   ang: 180 }, // W
+  { id: "mode-play",  lbl: "PLAY",  ang:  45 }, // SE diagonal
 ];
 MODE_BUTTONS.forEach(b => {
-  const a = b.a * Math.PI / 180;
-  const rx = C_CX + Math.cos(a) * R_MODE;
-  const ry = C_CY + Math.sin(a) * R_MODE;
+  const a = b.ang * Math.PI / 180;
+  const rx = C_CX + Math.cos(a) * MODE_ORBIT_R;
+  const ry = C_CY + Math.sin(a) * MODE_ORBIT_R;
   ledBall(gCircle, b.id, rx, ry, R_BALL_LG, "lg");
   text(gLabels, rx, ry + R_BALL_LG + 14, b.lbl, { size: 10, "class": "label-strong" });
 });
-text(gLabels, C_CX, C_CY, "MODE", { size: 14, "class": "label-strong" });
+// PAGE at centre, larger to match the hardware's emphasis.
+ledBall(gCircle, "mode-page", C_CX, C_CY, R_BALL_LG * 1.35, "lg");
+text(gLabels, C_CX, C_CY + R_BALL_LG * 1.35 + 14, "PAGE", { size: 11, "class": "label-strong" });
 
 /* 9g. TRANSPORT — bottom-right quadrant of the Circle.
    Reference manual §Transport (Nav Guide pg 13): Play, Stop, Pause, Record,
-   plus step-back / step-forward + repeat arrows shown in the lit photo. */
+   step-back / step-forward arrows. Glyphs rendered as SVG paths instead of
+   Unicode so they kern and scale consistently across hosts. */
 const TRANSPORT = [
-  { id: "transport-back",   lbl: "◀",   ang:  10 },
-  { id: "transport-stop",   lbl: "■",   ang:  25 },
-  { id: "transport-rec",    lbl: "●",   ang:  40 },
-  { id: "transport-pause",  lbl: "❚❚",  ang:  55 },
-  { id: "transport-play",   lbl: "▶",   ang:  70 },
-  { id: "transport-fwd",    lbl: "▶▶",  ang:  85 },
+  { id: "transport-back",  glyph: "back",  ang: 10 },
+  { id: "transport-stop",  glyph: "stop",  ang: 25 },
+  { id: "transport-rec",   glyph: "rec",   ang: 40 },
+  { id: "transport-pause", glyph: "pause", ang: 55 },
+  { id: "transport-play",  glyph: "play",  ang: 70 },
+  { id: "transport-fwd",   glyph: "fwd",   ang: 85 },
 ];
 TRANSPORT.forEach(b => {
   const a = b.ang * Math.PI / 180;
   const rx = C_CX + Math.cos(a) * (R_OUTER * 0.82);
   const ry = C_CY + Math.sin(a) * (R_OUTER * 0.82);
   ledBall(gCircle, b.id, rx, ry, R_BALL_LG, "lg");
-  text(gLabels, rx, ry + R_BALL_LG + 14, b.lbl, { size: 11, "class": "label-strong" });
+  transportGlyph(gLabels, b.glyph, rx, ry + R_BALL_LG + 16, 7);
 });
 text(gLabels, C_CX + R_OUTER * 0.55, C_CY + R_OUTER * 0.78, "TRANSPORT", { size: 12, "class": "label-strong" });
 
@@ -548,6 +618,8 @@ window.LED_STATES = LED_STATES;
     setTempo:       (bpm)               => adapter.setTempo(+bpm),
     setTransport:   (running)           => adapter.setTransport(!!+running),
     loadPage:       (json)              => adapter.loadPage(json),
+    setMode:        (mode, jsonSel)     => adapter.setMode(mode, jsonSel ? JSON.parse(jsonSel) : null),
+    setSelection:   (jsonSel)           => adapter.setSelection(JSON.parse(jsonSel)),
   };
 
   window.octoMessage = function octoMessage(name /*, ...args */) {
@@ -559,6 +631,79 @@ window.LED_STATES = LED_STATES;
 
   // For console testing / future inspection.
   window.octoAdapter = adapter;
+})();
+
+/* ── Interaction wiring ──
+   Delegated pointer handlers on the SVG root. Click / shift-click / double-click
+   route through ui-mock/interactions.js's interpretClick(); encoder drags
+   accumulate vertical pixels and emit ticks via interpretEncoderDelta(). All
+   outputs flow through window.octoEmit so Max can replace the default
+   console-logging sink with an outlet send. */
+(function interactionsGlue() {
+  if (!window.OctopusInteractions) {
+    console.warn("OctopusInteractions not loaded; input wiring skipped.");
+    return;
+  }
+  const I = window.OctopusInteractions;
+  const svg = document.getElementById("panel-svg");
+  const recent = [];
+  const RECENT_CAP = 12;
+
+  function defaultEmit(name) {
+    const args = Array.prototype.slice.call(arguments, 1);
+    const entry = name + (args.length ? " " + args.join(" ") : "");
+    recent.unshift(entry);
+    if (recent.length > RECENT_CAP) recent.pop();
+    const log = document.getElementById("emit-log");
+    if (log) log.textContent = recent.join("\n");
+    console.log("octoEmit:", entry);
+  }
+  if (typeof window.octoEmit !== "function") window.octoEmit = defaultEmit;
+
+  // Walk up from a hit target to the nearest ancestor with an id we recognise.
+  function findInteractive(target) {
+    let n = target;
+    while (n && n !== svg) {
+      if (n.id) return n;
+      n = n.parentNode;
+    }
+    return null;
+  }
+
+  svg.addEventListener("click", function (ev) {
+    const node = findInteractive(ev.target);
+    if (!node) return;
+    const msg = I.interpretClick(node.id, { shift: ev.shiftKey, alt: ev.altKey, meta: ev.metaKey }, false);
+    if (msg) window.octoEmit.apply(null, [msg.name].concat(msg.args));
+  });
+
+  svg.addEventListener("dblclick", function (ev) {
+    const node = findInteractive(ev.target);
+    if (!node) return;
+    const msg = I.interpretClick(node.id, { shift: ev.shiftKey }, true);
+    if (msg) window.octoEmit.apply(null, [msg.name].concat(msg.args));
+  });
+
+  // Encoder drag — pointer events.
+  let drag = null;
+  svg.addEventListener("pointerdown", function (ev) {
+    const node = findInteractive(ev.target);
+    if (!node || !/encoder/.test(node.id)) return;
+    drag = { id: node.id, lastY: ev.clientY, accumulatedPx: 0 };
+    try { ev.target.setPointerCapture && ev.target.setPointerCapture(ev.pointerId); } catch (e) {}
+  });
+  window.addEventListener("pointermove", function (ev) {
+    if (!drag) return;
+    drag.accumulatedPx += (drag.lastY - ev.clientY); // up = positive
+    drag.lastY = ev.clientY;
+    const msg = I.interpretEncoderDelta(drag.id, drag.accumulatedPx);
+    if (msg) {
+      window.octoEmit.apply(null, [msg.name].concat(msg.args));
+      drag.accumulatedPx = msg.remainderPx;
+    }
+  });
+  window.addEventListener("pointerup", function () { drag = null; });
+  window.addEventListener("pointercancel", function () { drag = null; });
 })();
 
 /* ── Dev panel wiring ── */
