@@ -551,6 +551,8 @@ window.LED_STATES = LED_STATES;
     setTempo:       (bpm)               => adapter.setTempo(+bpm),
     setTransport:   (running)           => adapter.setTransport(!!+running),
     loadPage:       (json)              => adapter.loadPage(json),
+    setMode:        (mode, jsonSel)     => adapter.setMode(mode, jsonSel ? JSON.parse(jsonSel) : null),
+    setSelection:   (jsonSel)           => adapter.setSelection(JSON.parse(jsonSel)),
   };
 
   window.octoMessage = function octoMessage(name /*, ...args */) {
