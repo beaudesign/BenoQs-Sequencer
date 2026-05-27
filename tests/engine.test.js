@@ -116,6 +116,50 @@ function run(sandbox, t) {
     t.eq(outletsOfType("noteon").length, 0, "muted track silent");
   });
 
+  // ── keyboard transpose ────────────────────────────────────────────────
+  t("transpose(ti, note, vel) sets per-Track offset = note - 60", function () {
+    sandbox.reset_runtime();
+    sandbox.transpose(3, 67, 64);     // G4 above middle C
+    sandbox.transpose(7, 55, 64);     // G3 below middle C
+    // The engine's trackRt isn't directly exposed but we can verify behaviour
+    // by triggering tick() and inspecting the resulting noteon pitches.
+    var grid = pageWithOneActiveStep(3, 0);
+    grid.banks[0].pages[0].tracks[7].steps[0].active = true;
+    freshDict(grid);
+    // reset_runtime cleared the offsets — set them again *after* the dict load.
+    sandbox.transpose(3, 67, 64);
+    sandbox.transpose(7, 55, 64);
+    sandbox.transport_state(1);
+    for (var i = 0; i < 11; i++) sandbox.tick();
+    clearOutlets();
+    sandbox.tick();
+    var noteons = outletsOfType("noteon");
+    var byTrack = {};
+    noteons.forEach(function (c) { byTrack[c[3]] = c[4]; });  // ch -> pitch
+    // Track 3 default ch 4 (mch=1 + index logic? actually mch is per-track default 1 so ch=1).
+    // Default pitches: track 3 = G3 (50), track 7 = E5 (64).
+    // After +7 transpose: track 3 → 57; after -5 transpose: track 7 → 59.
+    var pitches = noteons.map(function (c) { return c[4]; }).sort(function (a,b){return a-b;});
+    t.ok(pitches.indexOf(57) !== -1, "track 3 default 50 + 7 = 57");
+    t.ok(pitches.indexOf(59) !== -1, "track 7 default 64 + (55-60=-5) = 59");
+  });
+
+  t("transpose with velocity > 88 zeros the offset", function () {
+    sandbox.reset_runtime();
+    sandbox.transpose(0, 72, 50);    // offset = +12
+    sandbox.transpose(0, 72, 100);   // velocity 100 > 88 → reset
+    var grid = pageWithOneActiveStep(0, 0);
+    freshDict(grid);
+    sandbox.transpose(0, 72, 50);
+    sandbox.transpose(0, 72, 100);
+    sandbox.transport_state(1);
+    for (var i = 0; i < 11; i++) sandbox.tick();
+    clearOutlets();
+    sandbox.tick();
+    var noteon = outletsOfType("noteon")[0];
+    t.eq(noteon[4], 57, "default track 0 pitch (no transpose)");
+  });
+
   // After all engine tests: stop the engine so its `running` flag doesn't
   // carry into other suites' fixture loads.
   sandbox.reset_runtime();

@@ -188,6 +188,29 @@ function run(sandbox, t) {
     t.eq(cc.cc, -1, "bend sentinel");
   });
 
+  t("runtime.transposeOffset shifts noteon pitch", function () {
+    var track = fx.makeTrack({ pit: 60 });
+    track.steps[0].active = true;
+    var page = fx.makePage({ tracks: [track] });
+    var rt = fx.primeForStep(fx.makeRuntime(), track);
+    rt.transposeOffset = 5;
+    var events = planTrack(track, rt, page, 100);
+    var noteon = events.filter(function (e) { return e.type === "noteon"; })[0];
+    t.eq(noteon.pitch, 65, "60 + transpose 5");
+  });
+
+  t("transposeOffset combines with pit_offset and page pit_offset", function () {
+    var track = fx.makeTrack({ pit: 60 });
+    track.steps[0].active = true;
+    track.steps[0].pit_offset = 3;
+    var page = fx.makePage({ tracks: [track], pit_offset: 2 });
+    var rt = fx.primeForStep(fx.makeRuntime(), track);
+    rt.transposeOffset = 7;
+    var events = planTrack(track, rt, page, 100);
+    var noteon = events.filter(function (e) { return e.type === "noteon"; })[0];
+    t.eq(noteon.pitch, 72, "60 + 2 + 3 + 7");
+  });
+
   t("chain head plays its own steps on first cycle", function () {
     var head = fx.makeTrack({ index: 0, chain_members: [3], chain_base: "individual" });
     head.steps[0].active = true;

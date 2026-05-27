@@ -28,6 +28,9 @@ function _rtInit() {
       chain: { memberIdx: 0, segPos: 0, pingDir: +1 },
       // note bookkeeping for panic / noteoffs: map key "port:chan:pitch" -> count
       held: {},
+      // Keyboard-driven transpose offset (relative mode, manual §Keyboard
+      // Transpose pg 78). Set by transpose() message; applied in scheduler.
+      transposeOffset: 0,
     });
   }
 }
@@ -87,6 +90,24 @@ function _allNotesOff() {
 }
 
 // --- Public messages from patcher ---
+
+// Inbound MIDI-keyboard transpose. Phase-1 MVP (relative mode):
+//   transpose(ti, note, velocity)
+// Sets a per-Track semitone offset = (note - 60). Velocity > 88 zeros the
+// offset (the manual describes this as 'toggle back to original', but
+// Phase-1 just resets — proper toggle requires tracking the original pit).
+// The Max patcher routes MIDI input → this function via track.transpose_mch
+// channel matching; that routing lives in the .amxd, not here.
+function transpose(ti, note, velocity) {
+  ti = Math.max(0, Math.min(9, Math.round(Number(ti) || 0)));
+  note = Math.max(0, Math.min(127, Math.round(Number(note) || 0)));
+  velocity = Math.max(0, Math.min(127, Math.round(Number(velocity) || 0)));
+  if (velocity > 88) {
+    trackRt[ti].transposeOffset = 0;
+  } else {
+    trackRt[ti].transposeOffset = note - 60;
+  }
+}
 
 function transport_state(v) {
   running = Number(v) ? 1 : 0;

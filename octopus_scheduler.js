@@ -161,8 +161,14 @@ function planTrack(track, runtime, page, globalTick) {
   var shuffleDelay = ((stepIndex % 2) === 1) ? _grvDelayTicks(baseTrack.grv) : 0;
 
   if (stepObj && !stepObj.skip && stepObj.active) {
-    // Resolve pitch with page+track+step offsets, then optional scale quantization.
-    var finalPit = (page.pit_offset || 0) + (baseTrack.pit || 60) + (stepObj.pit_offset || 0);
+    // Resolve pitch: page + track + step offsets + runtime keyboard transpose,
+    // then optional scale quantization. The transposeOffset lives on the
+    // *head/standalone* runtime (this function's `runtime`), not the active
+    // member's, because keyboard transpose is configured per visible Track.
+    var finalPit = (page.pit_offset || 0)
+                 + (baseTrack.pit || 60)
+                 + (stepObj.pit_offset || 0)
+                 + (runtime.transposeOffset || 0);
     finalPit = _clampMidi(finalPit);
     if (page.scale && page.scale.enabled) {
       var pcs = buildScalePitchClasses(page.scale.root, page.scale.intervals);
