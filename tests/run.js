@@ -9,12 +9,15 @@ var uiAdapterTests = require("./ui_adapter.test");
 var interactionsTests = require("./interactions.test");
 var schemaTests = require("./schema.test");
 var stateTests = require("./state.test");
+var liveTests = require("./live.test");
 
 var ctx = shim.createMaxContext();
 ctx.include("octopus_schema.js");
 ctx.include("octopus_state.js");
 ctx.include("octopus_scheduler.js"); // pulls in octopus_scale.js via its own include()
 ctx.include("octopus_presets.js");
+ctx.include("octopus_data.js");      // getStateDict (needed by octopus_live.js)
+ctx.include("octopus_live.js");
 
 var pass = 0;
 var fail = 0;
@@ -65,6 +68,9 @@ schemaTests.run(ctx, makeTester("schema"));
 
 process.stdout.write("\nstate.test.js\n");
 stateTests.run(ctx, makeTester("state"));
+
+process.stdout.write("\nlive.test.js\n");
+liveTests.run(ctx, makeTester("live"));
 
 process.stdout.write("\nscheduler.test.js\n");
 schedulerTests.run(ctx, makeTester("scheduler"));

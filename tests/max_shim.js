@@ -104,7 +104,27 @@ function createMaxContext() {
       };
     })(),
 
-    LiveAPI: undefined,
+    // LiveAPI mock — configurable per test. Default returns 4/4.
+    // Tests can replace sandbox._liveProps to drive different scenarios.
+    LiveAPI: (function () {
+      function MockLiveAPI(/* path */) {
+        var self = this;
+        self.get = function (prop) {
+          var v = sandbox._liveProps && sandbox._liveProps[prop];
+          return (v === undefined) ? null : v;
+        };
+      }
+      return MockLiveAPI;
+    })(),
+    _liveProps: { signature_numerator: 4, signature_denominator: 4 },
+
+    // Capture for outlet() calls so tests can assert broadcasts.
+    _outletCalls: [],
+  };
+
+  // Override outlet to record calls (after sandbox is created).
+  sandbox.outlet = function () {
+    sandbox._outletCalls.push(Array.prototype.slice.call(arguments));
   };
 
   // Memoize loads so include() is idempotent (mirrors how Max handles repeated
