@@ -7,8 +7,10 @@ var schedulerTests = require("./scheduler.test");
 var presetsTests = require("./presets.test");
 var uiAdapterTests = require("./ui_adapter.test");
 var interactionsTests = require("./interactions.test");
+var schemaTests = require("./schema.test");
 
 var ctx = shim.createMaxContext();
+ctx.include("octopus_schema.js");
 ctx.include("octopus_scheduler.js"); // pulls in octopus_scale.js via its own include()
 ctx.include("octopus_presets.js");
 
@@ -55,6 +57,9 @@ function makeTester(suiteName) {
   }
   return t;
 }
+
+process.stdout.write("\nschema.test.js\n");
+schemaTests.run(ctx, makeTester("schema"));
 
 process.stdout.write("\nscheduler.test.js\n");
 schedulerTests.run(ctx, makeTester("scheduler"));

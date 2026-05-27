@@ -1,167 +1,21 @@
 autowatch = 1;
 
 /**
- * BenoQs / Octopus state is stored in a Max Dict named by STATE_DICT_NAME.
+ * BenoQs / Octopus state storage + mutation API.
  * This file provides:
- * - deterministic default state creation
- * - schema enforcement (best-effort) + range clamping helpers
- * - small set of getters/setters for engine/UI
- * - preset dispatch (delegates content to octopus_presets.js)
+ *  - the State Dict name and access helper
+ *  - mutation setters that write the Dict and broadcast via outlet()
+ *  - ensure_state orchestration (delegates schema content to octopus_schema.js)
+ *  - preset dispatch (delegates content to octopus_presets.js)
+ *  - Live time-signature sync (will move to octopus_live.js in B3)
  *
  * NOTE: Max's JS runtime is not Node; avoid require(). Use include() from other JS files.
  */
 
+include("octopus_schema.js");  // defaults + repair_state + utilities
 include("octopus_presets.js"); // applyPresetToDict, buildPresetMutations
 
 var STATE_DICT_NAME = "octopus_state";
-
-// ---------- Utilities ----------
-
-function clampInt(v, min, max) {
-  v = Math.round(Number(v));
-  if (isNaN(v)) v = min;
-  if (v < min) return min;
-  if (v > max) return max;
-  return v;
-}
-
-function clampFloat(v, min, max) {
-  v = Number(v);
-  if (isNaN(v)) v = min;
-  if (v < min) return min;
-  if (v > max) return max;
-  return v;
-}
-
-function asBool(v) {
-  return !!v;
-}
-
-function deepCopy(obj) {
-  return JSON.parse(JSON.stringify(obj));
-}
-
-function ensureArrayLen(arr, len, fillValue) {
-  if (!Array.isArray(arr)) arr = [];
-  if (arr.length > len) arr = arr.slice(0, len);
-  while (arr.length < len) arr.push(deepCopy(fillValue));
-  return arr;
-}
-
-// ---------- Defaults (deterministic) ----------
-
-function defaultGlobalScale() {
-  return {
-    enabled: false,
-    root: 0,
-    intervals: [0, 2, 4, 5, 7, 9, 11],
-  };
-}
-
-function defaultPageScale() {
-  return {
-    enabled: false,
-    locked: false,
-    root: 60,
-    intervals: [0, 2, 4, 5, 7, 9, 11],
-  };
-}
-
-function defaultStep() {
-  return {
-    active: false,
-    skip: false,
-    pit_offset: 0,
-    vel_offset: 0,
-    len: 12, // 12 ticks = 1/16 at 192 PPQN
-    len_multiplier: 1,
-    sta_offset: 0,
-    amt: 0,
-    grv: 0,
-    pos: 8,
-    mcc_value: null,
-    chords: [],
-    polyphony: 1,
-    ghost: false,
-    hyperstep: null,
-    strum: 0, // Phase 1: used by chord engine; 0..9 (negative supported in UI layer)
-  };
-}
-
-function defaultTrack(trackIndex) {
-  // Manual default PIT values for tracks 9..0:
-  // C3, D3, E3, G3, A3, C5, D5, E5, G5, A5
-  // Track indices in this spec are 0..9 and map to the above list in order.
-  var manual = [57, 55, 52, 50, 48, 60, 62, 64, 67, 69]; // index 0..9 = [C3,D3,E3,G3,A3,C5,D5,E5,G5,A5]
-
-  return {
-    pit: clampInt(manual[trackIndex] != null ? manual[trackIndex] : 60, 0, 127),
-    vel: 100,
-    len_factor: 8,
-    sta_factor: 8,
-    dir: 1,
-    amt: 0,
-    grv: 0,
-    mcc: null, // null | 0..127 | "bend" | "pressure"
-    mch: 1, // 1..16 port1, 17..32 port2
-    multiplier: "1",
-    paused: false,
-    muted: false,
-    soloed: false,
-    chain_head: null,
-    chain_members: [],
-    chain_base: "individual", // "individual" | "head"
-    program_change: 0,
-    bank_change: null,
-    transpose_mch: null,
-    transpose_mode: "relative",
-    steps: ensureArrayLen([], 16, defaultStep()),
-  };
-}
-
-function defaultPage() {
-  var tracks = [];
-  for (var i = 0; i < 10; i++) tracks.push(defaultTrack(i));
-
-  return {
-    pit_offset: 0,
-    vel_factor: 8,
-    len: 16,
-    sta: 1,
-    scale: defaultPageScale(),
-    cluster_mode: false,
-    mute_pattern: ensureArrayLen([], 10, false),
-    tracks: tracks,
-  };
-}
-
-function defaultBank() {
-  var pages = [];
-  for (var i = 0; i < 16; i++) pages.push(defaultPage());
-  return { pages: pages };
-}
-
-function defaultGrid() {
-  var banks = [];
-  for (var i = 0; i < 10; i++) banks.push(defaultBank());
-
-  // page_sets: 16 slots, each an array of {bank,page} pairs
-  var pageSets = [];
-  for (var s = 0; s < 16; s++) pageSets.push([]);
-
-  return {
-    tempo_bpm: 120.0,
-    midi_port1_channel: 1,
-    active_page: { bank: 0, page: 0 },
-    live_time_signature: { numerator: 4, denominator: 4 },
-    page_sets: pageSets,
-    global_scale: defaultGlobalScale(),
-    banks: banks,
-    // routing mode: "octopus" | "fixed"
-    midi_routing_mode: "octopus",
-    fixed_routing: { base_channel_port1: 1, base_channel_port2: 1 },
-  };
-}
 
 // ---------- Dict access ----------
 
@@ -220,40 +74,7 @@ function ensure_state() {
     sync_time_signature_from_live();
     return;
   }
-  var changed = 0;
-  var def = defaultGrid();
-  function ensureRoot(key) {
-    if (d.get(key) == null) {
-      d.set(key, def[key]);
-      changed = 1;
-    }
-  }
-  ensureRoot("banks");
-  ensureRoot("active_page");
-  ensureRoot("page_sets");
-  ensureRoot("global_scale");
-  ensureRoot("midi_routing_mode");
-  ensureRoot("fixed_routing");
-  ensureRoot("tempo_bpm");
-  ensureRoot("live_time_signature");
-
-  // Repair active page shape/ranges without wiping other state.
-  var ap = d.get("active_page") || {};
-  var repairedAp = {
-    bank: clampInt(ap.bank, 0, 9),
-    page: clampInt(ap.page, 0, 15),
-  };
-  if (ap.bank !== repairedAp.bank || ap.page !== repairedAp.page) {
-    d.set("active_page", repairedAp);
-    changed = 1;
-  }
-
-  // Light schema marker for future migrations.
-  if (d.get("schema_version") == null) {
-    d.set("schema_version", 1);
-    changed = 1;
-  }
-
+  var changed = repair_state(d);
   if (changed) outlet(0, "state_repaired");
   outlet(0, "state_ok");
 }
