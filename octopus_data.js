@@ -14,6 +14,7 @@ autowatch = 1;
 
 include("octopus_schema.js");  // defaults + repair_state + utilities
 include("octopus_presets.js"); // applyPresetToDict, buildPresetMutations
+include("octopus_live.js");    // set_time_signature, sync_time_signature_from_live
 
 var STATE_DICT_NAME = "octopus_state";
 
@@ -29,41 +30,13 @@ function reset_state() {
   outlet(0, "state_reset");
 }
 
-// ---------- Live time signature (mirrors Live transport meter) ----------
+// ---------- UI nudge (used by mutations to ask the JSUI matrix to repaint) ----
 function _bangMatrixRedraw() {
   try {
     if (typeof this !== "undefined" && this.patcher) {
       var m = this.patcher.getnamed("jsui-matrix-1");
       if (m) m.message("bang");
     }
-  } catch (e) {}
-}
-
-function set_time_signature(num, den) {
-  num = clampInt(num, 1, 32);
-  den = clampInt(den, 1, 32);
-  var d = getStateDict();
-  var cur = d.get("live_time_signature");
-  var same =
-    cur &&
-    clampInt(cur.numerator, 1, 32) === num &&
-    clampInt(cur.denominator, 1, 32) === den;
-  d.set("live_time_signature", { numerator: num, denominator: den });
-  outlet(0, "time_signature", num, den);
-  if (!same) _bangMatrixRedraw();
-}
-
-function sync_time_signature_from_live() {
-  if (typeof LiveAPI === "undefined") return;
-  try {
-    var api = new LiveAPI("live_set");
-    var n = api.get("signature_numerator");
-    var de = api.get("signature_denominator");
-    var num = Array.isArray(n) ? n[0] : n;
-    var den = Array.isArray(de) ? de[0] : de;
-    num = clampInt(num, 1, 32);
-    den = clampInt(den, 1, 32);
-    set_time_signature(num, den);
   } catch (e) {}
 }
 
