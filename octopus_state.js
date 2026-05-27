@@ -78,18 +78,35 @@ function load_time_signature() {
   };
 }
 
-function _resolvePageScale(pageObj /*, globalScale */) {
-  // Phase 1: page scale wins; global scale is currently unused by engine.
-  // Returning null means "no quantization."
-  var sc = pageObj && pageObj.scale;
-  if (!sc || !sc.enabled) return null;
-  return {
-    enabled: true,
-    root: _clampInt(sc.root, 0, 127),
-    intervals: Array.isArray(sc.intervals) ? sc.intervals.slice(0) : [0, 2, 4, 5, 7, 9, 11],
-    mode: sc.mode ? String(sc.mode) : null,
-    locked: !!sc.locked,
-  };
+// Scale precedence per reference manual §The grid scale (pg 71):
+//   page scale enabled → use page scale
+//   else global (grid) scale enabled → use global scale
+//   else no quantization (null).
+// The manual notes a page can opt out of the grid scale by enabling its own
+// chromatic scale; that's handled implicitly by "page scale enabled wins".
+function _resolveScale(pageObj, globalScale) {
+  var pageSc = pageObj && pageObj.scale;
+  if (pageSc && pageSc.enabled) {
+    return {
+      enabled: true,
+      root: _clampInt(pageSc.root, 0, 127),
+      intervals: Array.isArray(pageSc.intervals) ? pageSc.intervals.slice(0) : [0, 2, 4, 5, 7, 9, 11],
+      mode: pageSc.mode ? String(pageSc.mode) : null,
+      locked: !!pageSc.locked,
+      source: "page",
+    };
+  }
+  if (globalScale && globalScale.enabled) {
+    return {
+      enabled: true,
+      root: _clampInt(globalScale.root, 0, 127),
+      intervals: Array.isArray(globalScale.intervals) ? globalScale.intervals.slice(0) : [0, 2, 4, 5, 7, 9, 11],
+      mode: globalScale.mode ? String(globalScale.mode) : null,
+      locked: false,
+      source: "global",
+    };
+  }
+  return null;
 }
 
 function _buildStepSnapshot(stepObj, stepIndex) {
@@ -181,6 +198,7 @@ function load_active_page() {
   var routingMode = String(d.get("midi_routing_mode") || "octopus").toLowerCase();
   if (routingMode !== "octopus" && routingMode !== "fixed") routingMode = "octopus";
   var fixedRouting = d.get("fixed_routing") || { base_channel_port1: 1, base_channel_port2: 1 };
+  var globalScale = d.get("global_scale");
 
   var tracks = [];
   for (var ti = 0; ti < 10; ti++) {
@@ -195,7 +213,7 @@ function load_active_page() {
     len: _clampInt(pageObj.len != null ? pageObj.len : 16, 1, 16),
     sta: pageObj.sta != null ? Number(pageObj.sta) : 1,
     cluster_mode: !!pageObj.cluster_mode,
-    scale: _resolvePageScale(pageObj),
+    scale: _resolveScale(pageObj, globalScale),
     mute_pattern: Array.isArray(pageObj.mute_pattern) ? pageObj.mute_pattern.slice(0) : [],
     routingMode: routingMode,
     tracks: tracks,
