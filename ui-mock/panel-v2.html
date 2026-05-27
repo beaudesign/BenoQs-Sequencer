@@ -31,6 +31,9 @@
   .label { fill: var(--engraved); font-family: var(--font); }
   .label-strong { fill: var(--engraved-strong); }
   .label-italic { font-style: italic; }
+  /* Musical-symbol fallback chain so clefs render cross-platform. */
+  .clef { font-family: "Bravura", "Bravura Text", "Petaluma", "Noto Music",
+          "Maestro", "Times New Roman", serif; }
 
   /* Flush LED appearance — slight rim, no heavy 3D shading. */
   .led { stroke: rgba(20,16,10,.22); stroke-width: 0.6; }
@@ -322,8 +325,8 @@ function encoder(parent, id, cx, cy, r) {
 const gClefs   = document.getElementById("g-clefs");
 const gRownums = document.getElementById("g-rownums");
 // Treble clef glyph for rows 9..5, bass clef for rows 4..0 (Unicode musical symbols).
-text(gClefs, X_CLEF, rowY(7), "\u{1D11E}", { size: 56, "class": "label-strong" });
-text(gClefs, X_CLEF, rowY(2), "\u{1D122}", { size: 56, "class": "label-strong" });
+text(gClefs, X_CLEF, rowY(7), "\u{1D11E}", { size: 56, "class": "label-strong clef" });
+text(gClefs, X_CLEF, rowY(2), "\u{1D122}", { size: 56, "class": "label-strong clef" });
 for (let r = 0; r < ROW_COUNT; r++) {
   text(gRownums, X_ROWNUM, rowY(r), String(r), { size: 22 });
 }
@@ -358,13 +361,20 @@ for (let c = 4; c < COL_COUNT; c += 4) {
     class: "beat-guide",
   }, gBeats);
 }
+// Bass/treble divider hairline between row 4 and row 5 — marks the clef split.
+const divY = (rowY(4) + rowY(5)) / 2;
+el("line", {
+  x1: colX(0) - R_BALL_SM - 6, y1: divY,
+  x2: colX(COL_COUNT - 1) + R_BALL_SM + 6, y2: divY,
+  stroke: "rgba(20,16,10,.18)", "stroke-width": 0.7, "stroke-dasharray": "2 4",
+}, gBeats);
 
 /* ── 4c. Column labels above the matrix (A..P, then 1..16) ──
    The hardware shows musical-note labels in the top edge (key signature row). */
 const COL_LABELS = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B","C","C#","D","D#"];
 const gLabels = document.getElementById("g-labels");
 for (let c = 0; c < COL_COUNT; c++) {
-  text(gLabels, colX(c), rowY(9) - R_BALL_SM - 22, COL_LABELS[c], { size: 12, "class": "" });
+  text(gLabels, colX(c), rowY(9) - R_BALL_SM - 22, COL_LABELS[c], { size: 14, "class": "label-strong" });
 }
 
 /* ── 5. Attribute selector column (10 balls + engraved labels) ── */
