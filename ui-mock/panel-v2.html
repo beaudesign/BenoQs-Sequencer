@@ -31,6 +31,9 @@
   .label { fill: var(--engraved); font-family: var(--font); }
   .label-strong { fill: var(--engraved-strong); }
   .label-italic { font-style: italic; }
+  /* Musical-symbol fallback chain so clefs render cross-platform. */
+  .clef { font-family: "Bravura", "Bravura Text", "Petaluma", "Noto Music",
+          "Maestro", "Times New Roman", serif; }
 
   /* Flush LED appearance — slight rim, no heavy 3D shading. */
   .led { stroke: rgba(20,16,10,.22); stroke-width: 0.6; }
@@ -127,6 +130,11 @@
     </select>
     <div class="state-grid" id="dev-state-grid"></div>
     <div class="hint">Or use the console: <code>setLed(id, state)</code>. Ids: matrix-r0..9-c0..15, mix-encoder-N, sel-N, mut-N, mode-{grid|page|track|step|map|play}, scale-note-0..11, etc.</div>
+    <h4 style="margin-top:8px;font-size:11px;font-weight:600;letter-spacing:.04em;opacity:.82;">Demo</h4>
+    <div style="margin-top:4px;display:flex;gap:4px;">
+      <button id="dev-demo-run" type="button" style="flex:1;font:inherit;color:#f4f1ea;background:rgba(94,180,68,.22);border:1px solid rgba(94,180,68,.42);border-radius:4px;padding:4px 6px;cursor:pointer;">▶ Run demo</button>
+      <button id="dev-demo-stop" type="button" style="font:inherit;color:#f4f1ea;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:4px;padding:4px 8px;cursor:pointer;">■</button>
+    </div>
     <h4 style="margin-top:8px;font-size:11px;font-weight:600;letter-spacing:.04em;opacity:.82;">Outgoing (octoEmit)</h4>
     <pre id="emit-log" style="margin-top:4px;font:11px/1.35 ui-monospace,Menlo,monospace;color:#d6f0c4;background:rgba(255,255,255,.04);padding:6px 8px;border-radius:4px;max-height:140px;overflow:auto;white-space:pre-wrap;"></pre>
   </div>
@@ -322,8 +330,8 @@ function encoder(parent, id, cx, cy, r) {
 const gClefs   = document.getElementById("g-clefs");
 const gRownums = document.getElementById("g-rownums");
 // Treble clef glyph for rows 9..5, bass clef for rows 4..0 (Unicode musical symbols).
-text(gClefs, X_CLEF, rowY(7), "\u{1D11E}", { size: 56, "class": "label-strong" });
-text(gClefs, X_CLEF, rowY(2), "\u{1D122}", { size: 56, "class": "label-strong" });
+text(gClefs, X_CLEF, rowY(7), "\u{1D11E}", { size: 56, "class": "label-strong clef" });
+text(gClefs, X_CLEF, rowY(2), "\u{1D122}", { size: 56, "class": "label-strong clef" });
 for (let r = 0; r < ROW_COUNT; r++) {
   text(gRownums, X_ROWNUM, rowY(r), String(r), { size: 22 });
 }
@@ -358,13 +366,20 @@ for (let c = 4; c < COL_COUNT; c += 4) {
     class: "beat-guide",
   }, gBeats);
 }
+// Bass/treble divider hairline between row 4 and row 5 — marks the clef split.
+const divY = (rowY(4) + rowY(5)) / 2;
+el("line", {
+  x1: colX(0) - R_BALL_SM - 6, y1: divY,
+  x2: colX(COL_COUNT - 1) + R_BALL_SM + 6, y2: divY,
+  stroke: "rgba(20,16,10,.18)", "stroke-width": 0.7, "stroke-dasharray": "2 4",
+}, gBeats);
 
 /* ── 4c. Column labels above the matrix (A..P, then 1..16) ──
    The hardware shows musical-note labels in the top edge (key signature row). */
 const COL_LABELS = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B","C","C#","D","D#"];
 const gLabels = document.getElementById("g-labels");
 for (let c = 0; c < COL_COUNT; c++) {
-  text(gLabels, colX(c), rowY(9) - R_BALL_SM - 22, COL_LABELS[c], { size: 12, "class": "" });
+  text(gLabels, colX(c), rowY(9) - R_BALL_SM - 22, COL_LABELS[c], { size: 14, "class": "label-strong" });
 }
 
 /* ── 5. Attribute selector column (10 balls + engraved labels) ── */
@@ -704,6 +719,77 @@ window.LED_STATES = LED_STATES;
   });
   window.addEventListener("pointerup", function () { drag = null; });
   window.addEventListener("pointercancel", function () { drag = null; });
+})();
+
+/* ── Demo runner ──
+   Plays a scripted sequence through octoMessage so anyone can see the panel
+   come alive without booting Max. ~7 second loop: load preset-1-style page,
+   run a chase light across two tracks, switch modes mid-sequence, restore. */
+(function demoRunner() {
+  let timers = [];
+  function delay(ms, fn) { timers.push(setTimeout(fn, ms)); }
+  function stopAll() {
+    timers.forEach(clearTimeout);
+    timers = [];
+  }
+
+  function buildSyntheticPage() {
+    const page = { bank: 0, page: 0, tracks: [] };
+    for (let ti = 0; ti < 10; ti++) {
+      const steps = [];
+      for (let si = 0; si < 16; si++) {
+        steps.push({
+          active: si % 4 === 0,
+          skip: ti === 5 && si === 6,         // one skipped step for visual variety
+          chords: ti === 3 && si === 8 ? [3, 7] : [],
+          vel_offset: (si * 8) - 64,           // ascending bar shape
+        });
+      }
+      page.tracks.push({ steps });
+    }
+    return page;
+  }
+
+  function run() {
+    stopAll();
+    octoMessage("loadPage", JSON.stringify(buildSyntheticPage()));
+    octoMessage("setTempo", 124);
+    octoMessage("setTransport", 1);
+    if (window.setLedScope) {
+      window.setLedScope("scale", "green");
+      window.setLed && window.setLed("scale-note-0", "orange");
+    }
+
+    // Chase lights on tracks 0 and 5; tempo-aligned at ~16 steps over 4s.
+    const stepMs = 250;
+    for (let si = 0; si < 16; si++) {
+      delay(si * stepMs,        () => octoMessage("updatePlayhead", 0, si));
+      delay(si * stepMs + 40,   () => octoMessage("updatePlayhead", 5, si));
+    }
+
+    // Mid-sequence: dip into track mode then back.
+    delay(2200, () => octoMessage("setMode", "track", JSON.stringify({ track: 3, mixTarget: "vel" })));
+    delay(3400, () => octoMessage("setMode", "page"));
+
+    // Finish: clear playheads + stop transport.
+    delay(4200, () => {
+      octoMessage("updatePlayhead", 0, -1);
+      octoMessage("updatePlayhead", 5, -1);
+      octoMessage("setTransport", 0);
+    });
+  }
+
+  function hardStop() {
+    stopAll();
+    octoMessage("updatePlayhead", 0, -1);
+    octoMessage("updatePlayhead", 5, -1);
+    octoMessage("setTransport", 0);
+  }
+
+  const runBtn  = document.getElementById("dev-demo-run");
+  const stopBtn = document.getElementById("dev-demo-stop");
+  if (runBtn)  runBtn.addEventListener("click", run);
+  if (stopBtn) stopBtn.addEventListener("click", hardStop);
 })();
 
 /* ── Dev panel wiring ── */

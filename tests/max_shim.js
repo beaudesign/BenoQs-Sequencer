@@ -37,16 +37,94 @@ function createMaxContext() {
     Error: Error,
     RegExp: RegExp,
 
-    // Bare Dict stand-in. Scheduler tests don't touch it; State facade tests
-    // (Phase A2) will need a real one.
-    Dict: function Dict(/* name */) {
-      this.get = function () { return null; };
-      this.set = function () {};
-      this.getkeys = function () { return null; };
-      this.parse = function () {};
-    },
+    // In-memory Dict that mirrors Max's :: path semantics. Numeric path
+    // segments index arrays; everything else indexes objects. set() creates
+    // intermediate objects/arrays on the way down. Multiple Dict instances
+    // sharing a name share the same backing store (matches Max behaviour).
+    Dict: (function () {
+      var stores = {}; // name -> root object
 
-    LiveAPI: undefined,
+      function _segments(key) {
+        return String(key).split("::");
+      }
+      function _isArrayIndex(seg) {
+        return /^\d+$/.test(seg);
+      }
+      function _walk(root, segs, create) {
+        var node = root;
+        for (var i = 0; i < segs.length - 1; i++) {
+          var seg = segs[i];
+          var next = _isArrayIndex(seg) ? node[+seg] : node[seg];
+          if (next === undefined || next === null) {
+            if (!create) return null;
+            // Decide array vs object based on the next segment.
+            next = _isArrayIndex(segs[i + 1]) ? [] : {};
+            if (_isArrayIndex(seg)) node[+seg] = next; else node[seg] = next;
+          }
+          node = next;
+        }
+        return node;
+      }
+
+      return function Dict(name) {
+        name = name || "__default__";
+        if (!stores[name]) stores[name] = {};
+        var self = this;
+
+        self.get = function (key) {
+          var segs = _segments(key);
+          var parent = _walk(stores[name], segs, false);
+          if (parent === null) return null;
+          var leaf = segs[segs.length - 1];
+          var v = _isArrayIndex(leaf) ? parent[+leaf] : parent[leaf];
+          return (v === undefined) ? null : v;
+        };
+
+        self.set = function (key, value) {
+          var segs = _segments(key);
+          var parent = _walk(stores[name], segs, true);
+          var leaf = segs[segs.length - 1];
+          if (_isArrayIndex(leaf)) parent[+leaf] = value;
+          else parent[leaf] = value;
+        };
+
+        self.getkeys = function () {
+          var keys = Object.keys(stores[name]);
+          return keys.length ? keys : null;
+        };
+
+        self.parse = function (json) {
+          try { stores[name] = JSON.parse(String(json)); }
+          catch (e) { /* leave as-is */ }
+        };
+
+        // Test helpers: clear / inspect the backing store.
+        self._reset = function () { stores[name] = {}; };
+        self._raw   = function () { return stores[name]; };
+      };
+    })(),
+
+    // LiveAPI mock — configurable per test. Default returns 4/4.
+    // Tests can replace sandbox._liveProps to drive different scenarios.
+    LiveAPI: (function () {
+      function MockLiveAPI(/* path */) {
+        var self = this;
+        self.get = function (prop) {
+          var v = sandbox._liveProps && sandbox._liveProps[prop];
+          return (v === undefined) ? null : v;
+        };
+      }
+      return MockLiveAPI;
+    })(),
+    _liveProps: { signature_numerator: 4, signature_denominator: 4 },
+
+    // Capture for outlet() calls so tests can assert broadcasts.
+    _outletCalls: [],
+  };
+
+  // Override outlet to record calls (after sandbox is created).
+  sandbox.outlet = function () {
+    sandbox._outletCalls.push(Array.prototype.slice.call(arguments));
   };
 
   // Memoize loads so include() is idempotent (mirrors how Max handles repeated

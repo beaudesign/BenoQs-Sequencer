@@ -28,6 +28,9 @@ function _rtInit() {
       chain: { memberIdx: 0, segPos: 0, pingDir: +1 },
       // note bookkeeping for panic / noteoffs: map key "port:chan:pitch" -> count
       held: {},
+      // Keyboard-driven transpose offset (relative mode, manual §Keyboard
+      // Transpose pg 78). Set by transpose() message; applied in scheduler.
+      transposeOffset: 0,
     });
   }
 }
@@ -87,6 +90,37 @@ function _allNotesOff() {
 }
 
 // --- Public messages from patcher ---
+
+// Inbound MIDI-keyboard transpose. transpose(ti, note, velocity).
+//   relative mode (default): offset = note - 60 (relative to middle C)
+//   absolute mode:           offset = note - track.pit (so finalPit = note)
+// Velocity > 88 resets the offset in both modes (manual §Keyboard Transpose
+// pg 78 describes this as 'toggle back to original'; we just reset).
+// The Max patcher routes MIDI input → this function via track.transpose_mch
+// channel matching; that routing lives in the .amxd, not here.
+function transpose(ti, note, velocity) {
+  ti = Math.max(0, Math.min(9, Math.round(Number(ti) || 0)));
+  note = Math.max(0, Math.min(127, Math.round(Number(note) || 0)));
+  velocity = Math.max(0, Math.min(127, Math.round(Number(velocity) || 0)));
+  if (velocity > 88) {
+    trackRt[ti].transposeOffset = 0;
+    return;
+  }
+  // Look up the Track's mode + base pitch via the state facade. This is a
+  // rare event (human MIDI input) so the per-call Dict read is fine.
+  var mode = "relative";
+  var basePit = 60;
+  var page = load_active_page();
+  if (page && page.tracks && page.tracks[ti]) {
+    mode = page.tracks[ti].transpose_mode || "relative";
+    basePit = page.tracks[ti].pit;
+  }
+  if (mode === "absolute") {
+    trackRt[ti].transposeOffset = note - basePit;
+  } else {
+    trackRt[ti].transposeOffset = note - 60;
+  }
+}
 
 function transport_state(v) {
   running = Number(v) ? 1 : 0;
