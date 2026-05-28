@@ -144,6 +144,37 @@ function run(sandbox, t) {
     t.ok(pitches.indexOf(59) !== -1, "track 7 default 64 + (55-60=-5) = 59");
   });
 
+  t("absolute mode: offset = note - track.pit so finalPit = note", function () {
+    sandbox.reset_runtime();
+    var grid = pageWithOneActiveStep(0, 0);
+    // Track 0 default pit = 57 (C3). Set absolute mode.
+    grid.banks[0].pages[0].tracks[0].transpose_mode = "absolute";
+    freshDict(grid);
+    sandbox.transpose(0, 72, 50);   // request note C5 = 72
+    sandbox.transport_state(1);
+    for (var i = 0; i < 11; i++) sandbox.tick();
+    clearOutlets();
+    sandbox.tick();
+    var noteon = outletsOfType("noteon")[0];
+    // Default track 0 pit=57, abs offset = 72 - 57 = 15. finalPit = 57 + 15 = 72.
+    t.eq(noteon[4], 72, "absolute mode lands exactly on the played note");
+  });
+
+  t("relative mode: offset = note - 60 regardless of track.pit", function () {
+    sandbox.reset_runtime();
+    var grid = pageWithOneActiveStep(0, 0);
+    grid.banks[0].pages[0].tracks[0].transpose_mode = "relative";
+    freshDict(grid);
+    sandbox.transpose(0, 72, 50);   // request +12 from middle C
+    sandbox.transport_state(1);
+    for (var i = 0; i < 11; i++) sandbox.tick();
+    clearOutlets();
+    sandbox.tick();
+    var noteon = outletsOfType("noteon")[0];
+    // Track 0 default pit=57, rel offset = 72 - 60 = 12. finalPit = 57 + 12 = 69.
+    t.eq(noteon[4], 69, "relative mode keeps track pit as anchor");
+  });
+
   t("transpose with velocity > 88 zeros the offset", function () {
     sandbox.reset_runtime();
     sandbox.transpose(0, 72, 50);    // offset = +12

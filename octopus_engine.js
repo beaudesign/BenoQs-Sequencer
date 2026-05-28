@@ -91,11 +91,11 @@ function _allNotesOff() {
 
 // --- Public messages from patcher ---
 
-// Inbound MIDI-keyboard transpose. Phase-1 MVP (relative mode):
-//   transpose(ti, note, velocity)
-// Sets a per-Track semitone offset = (note - 60). Velocity > 88 zeros the
-// offset (the manual describes this as 'toggle back to original', but
-// Phase-1 just resets — proper toggle requires tracking the original pit).
+// Inbound MIDI-keyboard transpose. transpose(ti, note, velocity).
+//   relative mode (default): offset = note - 60 (relative to middle C)
+//   absolute mode:           offset = note - track.pit (so finalPit = note)
+// Velocity > 88 resets the offset in both modes (manual §Keyboard Transpose
+// pg 78 describes this as 'toggle back to original'; we just reset).
 // The Max patcher routes MIDI input → this function via track.transpose_mch
 // channel matching; that routing lives in the .amxd, not here.
 function transpose(ti, note, velocity) {
@@ -104,6 +104,19 @@ function transpose(ti, note, velocity) {
   velocity = Math.max(0, Math.min(127, Math.round(Number(velocity) || 0)));
   if (velocity > 88) {
     trackRt[ti].transposeOffset = 0;
+    return;
+  }
+  // Look up the Track's mode + base pitch via the state facade. This is a
+  // rare event (human MIDI input) so the per-call Dict read is fine.
+  var mode = "relative";
+  var basePit = 60;
+  var page = load_active_page();
+  if (page && page.tracks && page.tracks[ti]) {
+    mode = page.tracks[ti].transpose_mode || "relative";
+    basePit = page.tracks[ti].pit;
+  }
+  if (mode === "absolute") {
+    trackRt[ti].transposeOffset = note - basePit;
   } else {
     trackRt[ti].transposeOffset = note - 60;
   }
